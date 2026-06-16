@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Volunteer {
+  id        Int             @id @default(autoincrement())
+  name      String
+  age       Int?
+  phone     String          @unique
+  status    VolunteerStatus @default(NOT_CALLED)
+  teacher   Teacher?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([status])
+  @@index([phone])
+}
+
+enum VolunteerStatus {
+  NOT_CALLED
+  NO_ANSWER
+  REJECTED
+  AVAILABLE
+  WECHAT_ADDED
+  APPOINTED
+}
+
+enum Teacher {
+  WANG_LE
+  WEI_SHIYIN
+}
