@@ -2,12 +2,18 @@ import { Request, Response } from 'express';
 import * as XLSX from 'xlsx';
 import type { ImportVolunteerInput } from '../services/volunteer.service.js';
 import {
+  createVolunteerSheet,
   createVolunteer,
+  deleteVolunteerSheet,
   deleteVolunteer,
+  getDefaultVolunteerSheet,
   importVolunteerRows,
   isValidTeacher,
   isValidVolunteerStatus,
+  listVolunteerSheets,
   listVolunteers,
+  listVolunteersBySheet,
+  updateVolunteerSheet,
   updateVolunteer
 } from '../services/volunteer.service.js';
 
@@ -37,6 +43,26 @@ function parseAge(value: unknown) {
 function parseId(value: string) {
   const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : undefined;
+}
+
+function parseOptionalId(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : undefined;
+}
+
+async function resolveSheetId(value: unknown) {
+  const sheetId = parseOptionalId(value);
+
+  if (sheetId) {
+    return sheetId;
+  }
+
+  const defaultSheet = await getDefaultVolunteerSheet();
+  return defaultSheet.id;
 }
 
 function parseImportAge(value: unknown) {
@@ -92,46 +118,116 @@ function parseExcelRows(buffer: Buffer) {
 
 export async function getVolunteers(req: Request, res: Response) {
   const { status } = req.query;
+  const sheetId = parseOptionalId(req.query.sheetId);
 
   if (status !== undefined && !isValidVolunteerStatus(status)) {
-    return res.status(400).json({ message: 'Invalid volunteer status.' });
+    return res.status(400).json({ message: '志愿者状态无效。' });
   }
 
-  const volunteers = await listVolunteers(status);
+  const volunteers = sheetId
+    ? await listVolunteersBySheet(sheetId, status)
+    : await listVolunteers(status);
   return res.json(volunteers);
+}
+
+export async function getVolunteerSheets(_req: Request, res: Response) {
+  const sheets = await listVolunteerSheets();
+
+  if (sheets.length > 0) {
+    return res.json(sheets);
+  }
+
+  const defaultSheet = await getDefaultVolunteerSheet();
+  return res.json([defaultSheet]);
+}
+
+export async function postVolunteerSheet(req: Request, res: Response) {
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+
+  if (!name) {
+    return res.status(400).json({ message: '表格名称不能为空。' });
+  }
+
+  const sheet = await createVolunteerSheet({ name });
+  return res.status(201).json(sheet);
+}
+
+export async function putVolunteerSheet(req: Request, res: Response) {
+  const id = parseId(req.params.id);
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+
+  if (!id) {
+    return res.status(400).json({ message: '表格编号无效。' });
+  }
+
+  if (!name) {
+    return res.status(400).json({ message: '表格名称不能为空。' });
+  }
+
+  const sheet = await updateVolunteerSheet(id, { name });
+
+  if (!sheet) {
+    return res.status(404).json({ message: '未找到该表格。' });
+  }
+
+  return res.json(sheet);
+}
+
+export async function removeVolunteerSheet(req: Request, res: Response) {
+  const id = parseId(req.params.id);
+
+  if (!id) {
+    return res.status(400).json({ message: '表格编号无效。' });
+  }
+
+  try {
+    await deleteVolunteerSheet(id);
+    return res.status(204).send();
+  } catch (error) {
+    if (error instanceof Error && error.message === '至少需要保留一个表格。') {
+      return res.status(400).json({ message: error.message });
+    }
+
+    return res.status(404).json({ message: '未找到该表格。' });
+  }
 }
 
 export async function postVolunteer(req: Request, res: Response) {
   const { name, phone } = req.body;
   const age = parseAge(req.body.age);
   const status = req.body.status ?? 'NOT_CALLED';
+  const sheetId = await resolveSheetId(req.body.sheetId);
 
   if (!name || typeof name !== 'string') {
-    return res.status(400).json({ message: 'Name is required.' });
+    return res.status(400).json({ message: '姓名不能为空。' });
   }
 
   if (!phone || typeof phone !== 'string') {
-    return res.status(400).json({ message: 'Phone is required.' });
+    return res.status(400).json({ message: '电话不能为空。' });
   }
 
   if (age === undefined) {
-    return res.status(400).json({ message: 'Age must be a positive integer.' });
+    return res.status(400).json({ message: '年龄必须是正整数。' });
   }
 
   if (!isValidVolunteerStatus(status)) {
-    return res.status(400).json({ message: 'Invalid volunteer status.' });
+    return res.status(400).json({ message: '志愿者状态无效。' });
   }
 
   if (req.body.teacher !== undefined && req.body.teacher !== null && !isValidTeacher(req.body.teacher)) {
-    return res.status(400).json({ message: 'Invalid teacher.' });
+    return res.status(400).json({ message: '负责老师无效。' });
   }
 
   const volunteer = await createVolunteer({
+    sheetId,
     name: name.trim(),
     phone: phone.trim(),
     age,
+    account: req.body.account ? String(req.body.account).trim() : null,
+    password: req.body.password ? String(req.body.password).trim() : null,
     status,
-    teacher: req.body.teacher ?? null
+    teacher: req.body.teacher ?? null,
+    remark: req.body.remark ? String(req.body.remark).trim() : null
   });
 
   return res.status(201).json(volunteer);
@@ -141,33 +237,36 @@ export async function putVolunteer(req: Request, res: Response) {
   const id = parseId(req.params.id);
 
   if (!id) {
-    return res.status(400).json({ message: 'Invalid volunteer id.' });
+    return res.status(400).json({ message: '志愿者编号无效。' });
   }
 
   const age = parseAge(req.body.age);
 
   if ('age' in req.body && age === undefined) {
-    return res.status(400).json({ message: 'Age must be a positive integer.' });
+    return res.status(400).json({ message: '年龄必须是正整数。' });
   }
 
   if ('status' in req.body && !isValidVolunteerStatus(req.body.status)) {
-    return res.status(400).json({ message: 'Invalid volunteer status.' });
+    return res.status(400).json({ message: '志愿者状态无效。' });
   }
 
   if (req.body.teacher !== undefined && req.body.teacher !== null && !isValidTeacher(req.body.teacher)) {
-    return res.status(400).json({ message: 'Invalid teacher.' });
+    return res.status(400).json({ message: '负责老师无效。' });
   }
 
   const volunteer = await updateVolunteer(id, {
     ...('name' in req.body ? { name: String(req.body.name).trim() } : {}),
     ...('phone' in req.body ? { phone: String(req.body.phone).trim() } : {}),
+    ...('account' in req.body ? { account: req.body.account ? String(req.body.account).trim() : null } : {}),
+    ...('password' in req.body ? { password: req.body.password ? String(req.body.password).trim() : null } : {}),
+    ...('remark' in req.body ? { remark: req.body.remark ? String(req.body.remark).trim() : null } : {}),
     ...('age' in req.body ? { age } : {}),
     ...('status' in req.body ? { status: req.body.status } : {}),
     ...('teacher' in req.body ? { teacher: req.body.teacher } : {})
   });
 
   if (!volunteer) {
-    return res.status(404).json({ message: 'Volunteer not found.' });
+    return res.status(404).json({ message: '未找到该志愿者。' });
   }
 
   return res.json(volunteer);
@@ -177,14 +276,14 @@ export async function removeVolunteer(req: Request, res: Response) {
   const id = parseId(req.params.id);
 
   if (!id) {
-    return res.status(400).json({ message: 'Invalid volunteer id.' });
+    return res.status(400).json({ message: '志愿者编号无效。' });
   }
 
   try {
     await deleteVolunteer(id);
     return res.status(204).send();
   } catch {
-    return res.status(404).json({ message: 'Volunteer not found.' });
+    return res.status(404).json({ message: '未找到该志愿者。' });
   }
 }
 
@@ -197,35 +296,40 @@ export async function importVolunteers(req: Request, res: Response) {
 
   if (errors.length > 0) {
     return res.status(400).json({
-      message: 'Excel 导入失败，请修正后重试。',
+      message: '表格导入失败，请修正后重试。',
       errors
     });
   }
 
-  const result = await importVolunteerRows(rows);
+  const sheetId = await resolveSheetId(req.body.sheetId);
+  const result = await importVolunteerRows(sheetId, rows);
   return res.json({
-    message: 'Excel 导入完成。',
+    message: '表格导入完成。',
     ...result
   });
 }
 
 export async function exportVolunteers(req: Request, res: Response) {
   const { status } = req.query;
+  const sheetId = parseOptionalId(req.query.sheetId);
 
   if (status !== undefined && !isValidVolunteerStatus(status)) {
-    return res.status(400).json({ message: 'Invalid volunteer status.' });
+    return res.status(400).json({ message: '志愿者状态无效。' });
   }
 
-  const volunteers = await listVolunteers(status);
+  const volunteers = sheetId
+    ? await listVolunteersBySheet(sheetId, status)
+    : await listVolunteers(status);
   const rows = volunteers.map((volunteer) => ({
     姓名: volunteer.name,
     年龄: volunteer.age ?? '',
     电话: volunteer.phone,
     状态: statusLabels[volunteer.status],
-    负责老师: volunteer.teacher ? teacherLabels[volunteer.teacher] : ''
+    负责老师: volunteer.teacher ? teacherLabels[volunteer.teacher] : '',
+    备注: volunteer.remark ?? ''
   }));
   const worksheet = XLSX.utils.json_to_sheet(rows, {
-    header: ['姓名', '年龄', '电话', '状态', '负责老师']
+    header: ['姓名', '年龄', '电话', '状态', '负责老师', '备注']
   });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, '志愿者名单');

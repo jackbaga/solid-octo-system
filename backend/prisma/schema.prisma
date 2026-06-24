@@ -8,17 +8,77 @@ datasource db {
 }
 
 model Volunteer {
-  id        Int             @id @default(autoincrement())
-  name      String
-  age       Int?
-  phone     String          @unique
-  status    VolunteerStatus @default(NOT_CALLED)
-  teacher   Teacher?
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  id           Int             @id @default(autoincrement())
+  sheetId      Int
+  sheet        VolunteerSheet  @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  name         String
+  age          Int?
+  phone        String
+  account      String?
+  password     String?
+  status       VolunteerStatus @default(NOT_CALLED)
+  teacher      Teacher?
+  remark       String?
+  appointments Appointment[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 
   @@index([status])
+  @@index([sheetId])
   @@index([phone])
+  @@unique([sheetId, name, phone])
+}
+
+model VolunteerSheet {
+  id         Int         @id @default(autoincrement())
+  name       String      @unique
+  volunteers Volunteer[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Appointment {
+  id          Int      @id @default(autoincrement())
+
+  volunteerId Int?
+  volunteer   Volunteer? @relation(fields: [volunteerId], references: [id])
+
+  subjectName String
+  date        String
+  time        String
+
+  projectType AppointmentProjectType
+  session     String @default("Session 1")
+  round       String @default("第一轮")
+  remark      String?
+  status      AppointmentStatus @default(BOOKED)
+  taskCompletion TaskCompletion?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([date])
+  @@index([volunteerId])
+}
+
+model AppointmentDay {
+  id         Int      @id @default(autoincrement())
+  date       String   @unique
+  assistants String[] @default([])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model TaskCompletion {
+  id            Int         @id @default(autoincrement())
+  appointmentId Int         @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  date          String
+  completed     Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([date])
 }
 
 enum VolunteerStatus {
@@ -33,4 +93,19 @@ enum VolunteerStatus {
 enum Teacher {
   WANG_LE
   WEI_SHIYIN
+}
+
+enum AppointmentProjectType {
+  MRI
+  EEG
+  COGNITION
+  INTERVIEW
+  PARENT_INTERVIEW
+  FORMAL_TEST
+  OTHER
+}
+
+enum AppointmentStatus {
+  BOOKED
+  COMPLETED
 }

@@ -1,12 +1,14 @@
 import {
+  ArrowLeftOutlined,
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
   PlusOutlined,
+  TableOutlined,
   UploadOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
-import { Button, Layout, message, Popconfirm, Space, Table, Tag, Typography, Upload } from 'antd';
+import { Button, Input, Layout, message, Modal, Popconfirm, Space, Table, Tag, Typography, Upload } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadProps } from 'antd';
 import { useEffect, useState } from 'react';
@@ -15,16 +17,21 @@ import { VolunteerFormModal } from '../components/VolunteerFormModal';
 import { statusColors, statusLabels, teacherLabels } from '../constants/volunteer';
 import {
   createVolunteer,
+  createVolunteerSheet,
   deleteVolunteer,
+  deleteVolunteerSheet,
   exportVolunteers,
+  fetchVolunteerSheets,
   fetchVolunteers,
   importVolunteers,
+  updateVolunteerSheet,
   updateVolunteer
 } from '../services/volunteerApi';
 import {
   CreateVolunteerPayload,
   UpdateVolunteerPayload,
   Volunteer,
+  VolunteerSheet,
   VolunteerStatus
 } from '../types/volunteer';
 
@@ -43,6 +50,10 @@ function getErrorMessage(error: unknown) {
     }
   }
 
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
   return '操作失败，请稍后重试';
 }
 
@@ -58,19 +69,50 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export function CallManagementPage() {
+  const [sheets, setSheets] = useState<VolunteerSheet[]>([]);
+  const [selectedSheetId, setSelectedSheetId] = useState<number | null>(null);
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
   const [statusFilter, setStatusFilter] = useState<VolunteerStatus | 'ALL'>('ALL');
   const [loading, setLoading] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
+  const [sheetModalOpen, setSheetModalOpen] = useState(false);
+  const [sheetModalLoading, setSheetModalLoading] = useState(false);
+  const [sheetModalMode, setSheetModalMode] = useState<'create' | 'edit'>('create');
+  const [editingSheet, setEditingSheet] = useState<VolunteerSheet | null>(null);
+  const [sheetName, setSheetName] = useState('');
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingVolunteer, setEditingVolunteer] = useState<Volunteer | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
 
-  async function loadVolunteers(nextStatus = statusFilter) {
+  async function loadSheets(nextSelectedSheetId = selectedSheetId) {
+    try {
+      const data = await fetchVolunteerSheets();
+      setSheets(data);
+
+      if (!data.length) {
+        setSelectedSheetId(null);
+        return;
+      }
+
+      const selectedStillExists = nextSelectedSheetId
+        ? data.some((sheet) => sheet.id === nextSelectedSheetId)
+        : false;
+      setSelectedSheetId(selectedStillExists ? nextSelectedSheetId : data[0].id);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
+  }
+
+  async function loadVolunteers(nextStatus = statusFilter, nextSheetId = selectedSheetId) {
+    if (!nextSheetId) {
+      setVolunteers([]);
+      return;
+    }
+
     setLoading(true);
     try {
-      const data = await fetchVolunteers(nextStatus);
+      const data = await fetchVolunteers(nextStatus, nextSheetId);
       setVolunteers(data);
     } catch {
       messageApi.error('志愿者列表加载失败');
@@ -80,8 +122,70 @@ export function CallManagementPage() {
   }
 
   useEffect(() => {
+    loadSheets();
+  }, []);
+
+  useEffect(() => {
     loadVolunteers();
-  }, [statusFilter]);
+  }, [statusFilter, selectedSheetId]);
+
+  function openCreateSheetModal() {
+    setSheetModalMode('create');
+    setEditingSheet(null);
+    setSheetName('');
+    setSheetModalOpen(true);
+  }
+
+  function openRenameSheetModal(sheet: VolunteerSheet) {
+    setSheetModalMode('edit');
+    setEditingSheet(sheet);
+    setSheetName(sheet.name);
+    setSheetModalOpen(true);
+  }
+
+  function closeSheetModal() {
+    setSheetModalOpen(false);
+    setEditingSheet(null);
+    setSheetName('');
+  }
+
+  async function handleSheetSubmit() {
+    const name = sheetName.trim();
+
+    if (!name) {
+      messageApi.warning('请输入表格名称');
+      return;
+    }
+
+    setSheetModalLoading(true);
+    try {
+      if (sheetModalMode === 'create') {
+        const sheet = await createVolunteerSheet(name);
+        messageApi.success('表格已新建');
+        closeSheetModal();
+        await loadSheets(sheet.id);
+      } else if (editingSheet) {
+        const sheet = await updateVolunteerSheet(editingSheet.id, name);
+        messageApi.success('表格名称已更新');
+        closeSheetModal();
+        await loadSheets(sheet.id);
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setSheetModalLoading(false);
+    }
+  }
+
+  async function handleDeleteSheet(sheet: VolunteerSheet) {
+    try {
+      await deleteVolunteerSheet(sheet.id);
+      messageApi.success('表格已删除');
+      await loadSheets(sheet.id === selectedSheetId ? null : selectedSheetId);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
+  }
 
   function openCreateModal() {
     setModalMode('create');
@@ -101,10 +205,15 @@ export function CallManagementPage() {
   }
 
   async function handleSubmit(payload: CreateVolunteerPayload | UpdateVolunteerPayload) {
+    if (modalMode === 'create' && !selectedSheetId) {
+      messageApi.error('请先选择一个表格');
+      return;
+    }
+
     setModalLoading(true);
     try {
       if (modalMode === 'create') {
-        await createVolunteer(payload as CreateVolunteerPayload);
+        await createVolunteer({ ...(payload as CreateVolunteerPayload), sheetId: selectedSheetId ?? undefined });
         messageApi.success('志愿者已新增');
       } else if (editingVolunteer) {
         await updateVolunteer(editingVolunteer.id, payload as UpdateVolunteerPayload);
@@ -113,8 +222,8 @@ export function CallManagementPage() {
 
       closeVolunteerModal();
       await loadVolunteers();
-    } catch {
-      messageApi.error('保存失败，请检查输入后重试');
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
     } finally {
       setModalLoading(false);
     }
@@ -136,7 +245,11 @@ export function CallManagementPage() {
         throw new Error('请选择 .xlsx 文件');
       }
 
-      const result = await importVolunteers(file);
+      if (!selectedSheetId) {
+        throw new Error('请先选择一个表格');
+      }
+
+      const result = await importVolunteers(file, selectedSheetId);
       messageApi.success(`导入完成：新增 ${result.created} 条，更新 ${result.updated} 条`);
       await loadVolunteers();
       onSuccess?.(result);
@@ -149,8 +262,10 @@ export function CallManagementPage() {
 
   async function handleExport() {
     try {
-      const blob = await exportVolunteers(statusFilter);
-      downloadBlob(blob, '志愿者名单.xlsx');
+      const currentSheet = sheets.find((sheet) => sheet.id === selectedSheetId);
+      const filename = `${currentSheet?.name ?? '志愿者名单'}.xlsx`;
+      const blob = await exportVolunteers(statusFilter, selectedSheetId ?? undefined);
+      downloadBlob(blob, filename);
       messageApi.success('导出完成');
     } catch (error) {
       messageApi.error(getErrorMessage(error));
@@ -194,6 +309,14 @@ export function CallManagementPage() {
       render: (teacher: Volunteer['teacher']) => (teacher ? teacherLabels[teacher] : '-')
     },
     {
+      title: '备注',
+      dataIndex: 'remark',
+      key: 'remark',
+      width: 220,
+      ellipsis: true,
+      render: (remark: string | null) => remark || '-'
+    },
+    {
       title: '操作',
       key: 'actions',
       width: 160,
@@ -220,9 +343,12 @@ export function CallManagementPage() {
     <Layout className="app-shell">
       {contextHolder}
       <Header className="app-header">
-        <Typography.Title level={3} className="app-title">
-          CCBD-北大
-        </Typography.Title>
+        <Space>
+          <Button icon={<ArrowLeftOutlined />} href="#/" />
+          <Typography.Title level={3} className="app-title">
+            CCBD-北大
+          </Typography.Title>
+        </Space>
         <Space wrap>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
             新增志愿者
@@ -234,16 +360,59 @@ export function CallManagementPage() {
             showUploadList={false}
           >
             <Button icon={<UploadOutlined />}>
-              导入Excel
+            导入表格
             </Button>
           </Upload>
           <Button icon={<DownloadOutlined />} onClick={handleExport}>
-            导出Excel
+            导出表格
           </Button>
         </Space>
       </Header>
 
       <Content className="app-content">
+        <div className="sheet-tabs-bar">
+          <Space wrap size={8}>
+            {sheets.map((sheet) => (
+              <div
+                key={sheet.id}
+                className={`sheet-tab ${sheet.id === selectedSheetId ? 'active' : ''}`}
+              >
+                <Button
+                  type="text"
+                  icon={<TableOutlined />}
+                  onClick={() => setSelectedSheetId(sheet.id)}
+                >
+                  {sheet.name}
+                </Button>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => openRenameSheetModal(sheet)}
+                />
+                <Popconfirm
+                  title={`确认删除「${sheet.name}」？`}
+                  description="删除后，该表格内的志愿者信息也会被删除。"
+                  okText="删除"
+                  cancelText="取消"
+                  onConfirm={() => handleDeleteSheet(sheet)}
+                >
+                  <Button
+                    type="text"
+                    danger
+                    size="small"
+                    icon={<DeleteOutlined />}
+                    disabled={sheets.length <= 1}
+                  />
+                </Popconfirm>
+              </div>
+            ))}
+            <Button icon={<PlusOutlined />} onClick={openCreateSheetModal}>
+              新建表格
+            </Button>
+          </Space>
+        </div>
+
         <div className="toolbar">
           <StatusFilter value={statusFilter} onChange={setStatusFilter} />
         </div>
@@ -254,7 +423,7 @@ export function CallManagementPage() {
           columns={columns}
           dataSource={volunteers}
           pagination={{ pageSize: 10, showSizeChanger: true }}
-          scroll={{ x: 900 }}
+          scroll={{ x: 1120 }}
         />
       </Content>
 
@@ -266,6 +435,25 @@ export function CallManagementPage() {
         onCancel={closeVolunteerModal}
         onSubmit={handleSubmit}
       />
+
+      <Modal
+        title={sheetModalMode === 'create' ? '新建表格' : '重命名表格'}
+        open={sheetModalOpen}
+        confirmLoading={sheetModalLoading}
+        onCancel={closeSheetModal}
+        onOk={handleSheetSubmit}
+        okText={sheetModalMode === 'create' ? '新建' : '保存'}
+        cancelText="取消"
+      >
+        <Input
+          value={sheetName}
+          placeholder="请输入表格名称"
+          maxLength={40}
+          showCount
+          onChange={(event) => setSheetName(event.target.value)}
+          onPressEnter={handleSheetSubmit}
+        />
+      </Modal>
     </Layout>
   );
 }

@@ -13,6 +13,51 @@ body {
   min-height: 100vh;
 }
 
+.home-shell {
+  min-height: 100vh;
+  background: #eef3f8;
+}
+
+.home-content {
+  min-height: 100vh;
+  padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+}
+
+.home-heading {
+  text-align: center;
+}
+
+.home-title.ant-typography {
+  margin: 0;
+  color: #18202a;
+  font-size: 44px;
+  line-height: 1.15;
+}
+
+.home-subtitle.ant-typography {
+  display: block;
+  margin-top: 10px;
+  color: #5d6b7a;
+  font-size: 18px;
+}
+
+.home-actions {
+  justify-content: center;
+}
+
+.home-action-button.ant-btn {
+  width: 180px;
+  height: 64px;
+  border-radius: 6px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
 .app-header {
   height: auto;
   min-height: 72px;
@@ -24,6 +69,85 @@ body {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.calendar-topbar {
+  height: 104px;
+  padding: 0 32px;
+  background: #12a8f5;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.calendar-back-button.ant-btn {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.55);
+  background: transparent;
+}
+
+.calendar-brand.ant-typography {
+  margin: 0;
+  color: #ffffff;
+  font-size: 42px;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.calendar-top-actions {
+  margin-left: auto;
+}
+
+.calendar-top-actions .ant-btn {
+  color: #ffffff;
+  border-color: transparent;
+  background: transparent;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.calendar-content {
+  padding: 0 18px 32px;
+  background: #ffffff;
+}
+
+.calendar-control-row {
+  min-height: 86px;
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) auto minmax(260px, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.calendar-current-title.ant-typography {
+  margin: 0;
+  font-size: 64px;
+  line-height: 1;
+  font-weight: 800;
+  color: #262626;
+}
+
+.calendar-control-row .ant-segmented {
+  background: #e2e2e2;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.calendar-control-row .ant-segmented-item {
+  min-width: 72px;
+  border-radius: 10px;
+}
+
+.calendar-nav {
+  justify-content: flex-end;
+}
+
+.calendar-nav .ant-btn {
+  height: 40px;
+  font-size: 18px;
+  font-weight: 700;
+  border-radius: 10px;
 }
 
 .app-title.ant-typography {
@@ -38,6 +162,582 @@ body {
 .toolbar {
   margin-bottom: 16px;
   overflow-x: auto;
+}
+
+.sheet-tabs-bar {
+  margin-bottom: 14px;
+  padding: 10px;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.sheet-tab {
+  min-height: 34px;
+  padding: 2px 4px;
+  border: 1px solid #d8e0ea;
+  border-radius: 6px;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sheet-tab.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+
+.sheet-tab .ant-btn {
+  height: 28px;
+  padding-inline: 6px;
+}
+
+.placeholder-content {
+  min-height: calc(100vh - 72px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.appointment-calendar-head {
+  margin-bottom: 16px;
+}
+
+.appointment-calendar-head .ant-typography {
+  margin-top: 0;
+}
+
+.appointment-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 404px;
+  gap: 70px;
+  align-items: start;
+}
+
+.appointment-main {
+  min-width: 0;
+}
+
+.assistant-panel {
+  position: sticky;
+  top: 18px;
+  min-height: 900px;
+  padding: 14px 8px;
+  background: #ffffff;
+  border: 1px solid #666666;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.assistant-panel-title.ant-typography {
+  margin: 0 0 12px;
+  color: #111111;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.assistant-tag-list {
+  min-height: 260px;
+  margin: 20px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.assistant-tag.ant-tag {
+  margin: 0;
+  padding: 0;
+  color: #111111;
+  background: transparent;
+  border: 0;
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.assistant-panel-select {
+  width: 100%;
+}
+
+.appointment-board {
+  border: 1px solid #dde3ea;
+  border-radius: 0;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.appointment-row {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  min-height: 115px;
+  border-bottom: 1px solid #a8a8a8;
+}
+
+.appointment-row:last-child {
+  border-bottom: 0;
+}
+
+.appointment-add-time-row .appointment-slot-cell {
+  display: flex;
+  align-items: center;
+}
+
+.add-time-button.ant-btn {
+  width: 46px;
+  height: 46px;
+  color: #000000;
+  border-color: #000000;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 22px;
+}
+
+.appointment-time-cell {
+  padding: 18px 12px;
+  border-right: 1px solid #8b8b8b;
+  background: #82fb42;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 32px;
+}
+
+.appointment-time-cell .ant-typography {
+  font-size: 32px;
+  color: #000000;
+}
+
+.appointment-time-cell .ant-btn {
+  color: #000000;
+  border-color: #000000;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.appointment-slot-cell {
+  padding: 14px;
+  min-width: 0;
+  cursor: context-menu;
+}
+
+.appointment-item-card.ant-card {
+  border-radius: 6px;
+}
+
+.appointment-summary-text.ant-typography {
+  display: inline-block;
+  padding: 6px 8px;
+  background: #16a8f4;
+  color: #000000;
+  font-size: 26px;
+  line-height: 1.25;
+}
+
+.appointment-list {
+  width: 100%;
+}
+
+.summary-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 26px;
+}
+
+.week-day {
+  border: 0;
+  background: transparent;
+  color: #777777;
+  font-size: 20px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.week-day strong {
+  color: #303030;
+  font-weight: 500;
+  font-size: 20px;
+}
+
+.week-day.selected span {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: #ff3b30;
+}
+
+.month-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border: 1px solid #d6d6d6;
+  background: #ffffff;
+}
+
+.month-weekday {
+  padding: 12px;
+  color: #666666;
+  font-weight: 700;
+  text-align: center;
+  border-bottom: 1px solid #d6d6d6;
+}
+
+.month-day-cell {
+  min-height: 130px;
+  border: 0;
+  border-right: 1px solid #e5e5e5;
+  border-bottom: 1px solid #e5e5e5;
+  background: #ffffff;
+  text-align: left;
+  padding: 12px;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.month-day-cell.muted {
+  color: #b5b5b5;
+  background: #fafafa;
+}
+
+.month-day-cell.selected span,
+.month-day-cell.today span {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.month-day-cell.selected span {
+  color: #ffffff;
+  background: #1677ff;
+}
+
+.month-day-cell.today:not(.selected) span {
+  color: #ff3b30;
+  border: 1px solid #ff3b30;
+}
+
+.year-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  gap: 22px;
+}
+
+.year-month-card {
+  padding: 14px;
+  border: 1px solid #dddddd;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mini-month-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  text-align: center;
+}
+
+.mini-month-weekday {
+  color: #9a9a9a;
+  font-size: 12px;
+}
+
+.mini-month-day {
+  color: #333333;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.mini-month-day.muted {
+  color: #c6c6c6;
+}
+
+.calendar-context-menu {
+  position: fixed;
+  z-index: 2000;
+  min-width: 128px;
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #cfcfcf;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+}
+
+.calendar-context-menu button {
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-context-menu button:hover {
+  background: #f2f6ff;
+}
+
+.time-wheel-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.time-wheel-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.time-wheel-list {
+  height: 220px;
+  overflow-y: auto;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #fafafa;
+  scroll-snap-type: y mandatory;
+}
+
+.time-wheel-option {
+  width: 100%;
+  height: 40px;
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  scroll-snap-align: center;
+}
+
+.time-wheel-option:hover {
+  background: #edf5ff;
+}
+
+.time-wheel-option.selected {
+  color: #ffffff;
+  background: #1677ff;
+}
+
+.appointment-wizard-modal .ant-modal-content {
+  padding: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.appointment-wizard-modal .ant-modal-close {
+  display: none;
+}
+
+.wizard-window {
+  min-height: 980px;
+  background: #ffffff;
+}
+
+.wizard-titlebar {
+  height: 112px;
+  padding: 0 40px;
+  background: #d7d7d7;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+}
+
+.wizard-icon-button.ant-btn,
+.wizard-arrow-button.ant-btn {
+  width: 46px;
+  height: 46px;
+  font-size: 42px;
+  border: 0;
+  background: transparent;
+}
+
+.wizard-icon-button.close {
+  color: #ff2d16;
+}
+
+.wizard-icon-button.minimize {
+  color: #ffd928;
+}
+
+.wizard-arrow-button.ant-btn {
+  color: #777777;
+  font-size: 38px;
+}
+
+.wizard-title.ant-typography {
+  margin: 0 auto 0 28px;
+  color: #5a5a5a;
+  font-size: 54px;
+  line-height: 1;
+}
+
+.wizard-body {
+  min-height: 868px;
+  position: relative;
+  padding: 80px 82px;
+}
+
+.wizard-project-grid,
+.wizard-session-grid {
+  margin-top: 200px;
+  display: grid;
+  grid-template-columns: repeat(4, 200px);
+  justify-content: center;
+  gap: 132px;
+}
+
+.wizard-project-button.ant-btn {
+  width: 200px;
+  height: 128px;
+  border: 0;
+  border-radius: 14px;
+  color: #ffffff;
+  font-size: 40px;
+  font-weight: 800;
+}
+
+.wizard-project-button.project-blue {
+  background: #56baf1;
+}
+
+.wizard-project-button.project-teal {
+  background: #22d3c5;
+}
+
+.wizard-project-button.project-green {
+  background: #58d936;
+}
+
+.wizard-project-button.project-yellow {
+  background: #ffd72f;
+}
+
+.wizard-session-select.ant-select {
+  width: 268px;
+  margin-left: 100px;
+}
+
+.wizard-session-select .ant-select-selector {
+  height: 72px !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: #f1f1f1 !important;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.wizard-session-select .ant-select-selection-item {
+  line-height: 72px !important;
+  text-align: center;
+}
+
+.wizard-session-grid {
+  margin-top: 145px;
+}
+
+.wizard-confirm-button.ant-btn {
+  position: absolute;
+  right: 84px;
+  bottom: 46px;
+  width: 172px;
+  height: 106px;
+  border-radius: 12px;
+  background: #0f9fe8;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.wizard-subject-layout {
+  min-height: 760px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 424px;
+  gap: 72px;
+  align-items: start;
+}
+
+.wizard-subject-picker {
+  padding-top: 32px;
+}
+
+.wizard-subject-select.ant-select {
+  width: min(800px, 100%);
+  margin-bottom: 4px;
+}
+
+.wizard-subject-select .ant-select-selector {
+  height: 72px !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: #f1f1f1 !important;
+  font-size: 32px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.wizard-subject-select .ant-select-selection-item,
+.wizard-subject-select .ant-select-selection-placeholder {
+  line-height: 72px !important;
+  text-align: center;
+}
+
+.wizard-subject-list {
+  width: 500px;
+  margin-left: 270px;
+  border: 1px solid #9f9f9f;
+}
+
+.wizard-subject-list button {
+  width: 100%;
+  height: 52px;
+  border: 0;
+  border-bottom: 1px solid #b7b7b7;
+  background: #ffffff;
+  font-size: 30px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wizard-subject-list button.selected {
+  background: #f1f1f1;
+}
+
+.wizard-remark-box {
+  min-height: 522px;
+  padding: 8px;
+  border: 1px solid #666666;
+}
+
+.wizard-remark-box .ant-typography {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.wizard-remark-box textarea.ant-input {
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.wizard-confirm-button.subject {
+  right: 80px;
 }
 
 .ant-segmented {
@@ -59,4 +759,463 @@ body {
   .app-content {
     padding: 16px;
   }
+
+  .calendar-topbar {
+    height: auto;
+    min-height: 88px;
+    padding: 18px;
+    flex-wrap: wrap;
+  }
+
+  .calendar-brand.ant-typography {
+    font-size: 34px;
+  }
+
+  .calendar-control-row {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding: 14px 0;
+  }
+
+  .calendar-current-title.ant-typography {
+    font-size: 42px;
+  }
+
+  .home-content {
+    padding: 32px 16px;
+  }
+
+  .home-title.ant-typography {
+    font-size: 34px;
+  }
+
+  .home-action-button.ant-btn {
+    width: min(280px, calc(100vw - 32px));
+  }
+
+  .appointment-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-panel {
+    position: static;
+    order: -1;
+  }
+
+  .appointment-row {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .appointment-time-cell {
+    padding: 12px 8px;
+  }
+
+  .year-calendar-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .week-strip {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Unified visual refresh */
+:root {
+  --brand: #2563eb;
+  --brand-dark: #1e40af;
+  --accent: #14b8a6;
+  --surface: #ffffff;
+  --surface-soft: #f8fafc;
+  --page: #eef2f7;
+  --line: #d8e0ea;
+  --text: #1f2937;
+  --muted: #64748b;
+  --success-soft: #d9f99d;
+  --success-line: #84cc16;
+  --danger: #ef4444;
+  --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+body {
+  background: var(--page);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.ant-btn {
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.ant-btn-primary {
+  background: var(--brand);
+}
+
+.ant-modal-content,
+.ant-card,
+.ant-table-wrapper {
+  border-radius: 8px !important;
+}
+
+.home-shell {
+  background: linear-gradient(180deg, #f8fafc 0%, #eaf0f7 100%);
+}
+
+.home-content {
+  gap: 28px;
+}
+
+.home-title.ant-typography {
+  font-size: 38px;
+  color: var(--brand-dark);
+}
+
+.home-subtitle.ant-typography {
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.home-action-button.ant-btn {
+  width: 156px;
+  height: 52px;
+  font-size: 16px;
+}
+
+.app-header {
+  min-height: 64px;
+  padding: 12px 20px;
+  border-bottom-color: var(--line);
+}
+
+.app-title.ant-typography {
+  font-size: 22px;
+  color: var(--brand-dark);
+}
+
+.app-content {
+  padding: 20px;
+}
+
+.calendar-topbar {
+  height: 72px;
+  padding: 0 24px;
+  background: var(--brand);
+  box-shadow: var(--shadow);
+}
+
+.calendar-brand.ant-typography {
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.calendar-top-actions .ant-btn {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.calendar-content {
+  padding: 0 20px 28px;
+  background: var(--page);
+}
+
+.calendar-control-row {
+  min-height: 72px;
+  grid-template-columns: minmax(260px, 1fr) auto minmax(220px, 1fr);
+}
+
+.calendar-current-title.ant-typography {
+  font-size: 42px;
+  color: var(--text);
+}
+
+.calendar-control-row .ant-segmented {
+  background: #e2e8f0;
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+.calendar-control-row .ant-segmented-item {
+  min-width: 58px;
+  border-radius: 8px;
+}
+
+.calendar-nav .ant-btn {
+  height: 34px;
+  font-size: 14px;
+  border-radius: 8px;
+}
+
+.appointment-layout {
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 18px;
+}
+
+.appointment-board {
+  border-color: var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.appointment-row {
+  grid-template-columns: 132px minmax(0, 1fr);
+  min-height: 92px;
+  border-bottom-color: var(--line);
+}
+
+.appointment-time-cell {
+  padding: 12px;
+  border-right-color: var(--success-line);
+  background: var(--success-soft);
+  gap: 8px;
+  font-size: 20px;
+}
+
+.appointment-time-cell .ant-typography {
+  font-size: 20px;
+}
+
+.appointment-time-cell .ant-btn {
+  border-color: rgba(22, 101, 52, 0.35);
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.appointment-slot-cell {
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.appointment-item-card.ant-card {
+  border-color: #cfe8ff;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
+}
+
+.appointment-summary-text.ant-typography {
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: #dbeafe;
+  color: #1e3a8a;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.add-time-button.ant-btn {
+  width: 34px;
+  height: 34px;
+  font-size: 16px;
+}
+
+.week-strip {
+  margin-bottom: 18px;
+  gap: 6px;
+}
+
+.week-day {
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.week-day strong {
+  font-size: 15px;
+}
+
+.week-day.selected span {
+  width: 30px;
+  height: 30px;
+  background: var(--danger);
+}
+
+.assistant-panel {
+  top: 16px;
+  min-height: 520px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.assistant-panel-title.ant-typography {
+  font-size: 22px;
+  color: var(--brand-dark);
+}
+
+.assistant-tag-list {
+  min-height: 168px;
+  margin: 14px 0;
+  gap: 8px;
+}
+
+.assistant-tag.ant-tag {
+  padding: 3px 8px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: var(--brand-dark);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.month-day-cell {
+  min-height: 96px;
+  font-size: 15px;
+}
+
+.year-calendar-grid {
+  gap: 14px;
+}
+
+.year-month-card {
+  border-radius: 8px;
+  border-color: var(--line);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.appointment-wizard-modal .ant-modal-content {
+  border-radius: 10px !important;
+}
+
+.wizard-window {
+  min-height: 620px;
+}
+
+.wizard-titlebar {
+  height: 74px;
+  padding: 0 24px;
+  background: #edf2f7;
+  gap: 16px;
+}
+
+.wizard-icon-button.ant-btn,
+.wizard-arrow-button.ant-btn {
+  width: 34px;
+  height: 34px;
+  font-size: 28px;
+}
+
+.wizard-arrow-button.ant-btn {
+  font-size: 24px;
+}
+
+.wizard-title.ant-typography {
+  margin-left: 12px;
+  font-size: 34px;
+  color: var(--text);
+}
+
+.wizard-body {
+  min-height: 546px;
+  padding: 48px 56px;
+}
+
+.wizard-project-grid,
+.wizard-session-grid {
+  margin-top: 120px;
+  grid-template-columns: repeat(4, 150px);
+  gap: 78px;
+}
+
+.wizard-project-button.ant-btn {
+  width: 150px;
+  height: 92px;
+  border-radius: 10px;
+  font-size: 28px;
+}
+
+.wizard-project-button.project-blue {
+  background: #38bdf8;
+}
+
+.wizard-project-button.project-teal {
+  background: var(--accent);
+}
+
+.wizard-project-button.project-green {
+  background: #65a30d;
+}
+
+.wizard-project-button.project-yellow {
+  background: #facc15;
+  color: #3f3f46;
+}
+
+.wizard-session-select.ant-select {
+  width: 200px;
+  margin-left: 60px;
+}
+
+.wizard-session-select .ant-select-selector {
+  height: 50px !important;
+  border-radius: 8px !important;
+  font-size: 22px;
+}
+
+.wizard-session-select .ant-select-selection-item {
+  line-height: 50px !important;
+}
+
+.wizard-session-grid {
+  margin-top: 105px;
+}
+
+.wizard-confirm-button.ant-btn {
+  right: 56px;
+  bottom: 36px;
+  width: 118px;
+  height: 68px;
+  border-radius: 10px;
+  background: var(--brand);
+  font-size: 22px;
+}
+
+.wizard-subject-layout {
+  min-height: 460px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 48px;
+}
+
+.wizard-subject-picker {
+  padding-top: 24px;
+}
+
+.wizard-subject-select .ant-select-selector {
+  height: 50px !important;
+  border-radius: 8px !important;
+  font-size: 22px;
+}
+
+.wizard-subject-select .ant-select-selection-item,
+.wizard-subject-select .ant-select-selection-placeholder {
+  line-height: 50px !important;
+}
+
+.wizard-subject-list {
+  width: 360px;
+  margin-left: 180px;
+}
+
+.wizard-subject-list button {
+  height: 40px;
+  font-size: 20px;
+}
+
+.wizard-remark-box {
+  min-height: 330px;
+  border-color: var(--line);
+  border-radius: 6px;
+}
+
+.wizard-remark-box .ant-typography {
+  font-size: 22px;
+}
+
+.wizard-remark-box textarea.ant-input {
+  font-size: 18px;
+}
+
+.time-wheel-list {
+  height: 180px;
+}
+
+.time-wheel-option {
+  height: 34px;
+  font-size: 15px;
 }

@@ -2,10 +2,14 @@ import { NextFunction, Request, RequestHandler, Response, Router } from 'express
 import multer from 'multer';
 import {
   exportVolunteers,
+  getVolunteerSheets,
   getVolunteers,
   importVolunteers,
+  postVolunteerSheet,
   postVolunteer,
+  putVolunteerSheet,
   putVolunteer,
+  removeVolunteerSheet,
   removeVolunteer
 } from '../controllers/volunteer.controller.js';
 
@@ -27,10 +31,14 @@ const upload = multer({
       return;
     }
 
-    cb(new Error('Only .xlsx files are supported.'));
+    cb(new Error('仅支持 .xlsx 文件。'));
   }
 });
 
+volunteerRouter.get('/sheets', asyncHandler(getVolunteerSheets));
+volunteerRouter.post('/sheets', asyncHandler(postVolunteerSheet));
+volunteerRouter.put('/sheets/:id', asyncHandler(putVolunteerSheet));
+volunteerRouter.delete('/sheets/:id', asyncHandler(removeVolunteerSheet));
 volunteerRouter.get('/', asyncHandler(getVolunteers));
 volunteerRouter.post('/', asyncHandler(postVolunteer));
 volunteerRouter.put('/:id', asyncHandler(putVolunteer));
