@@ -7,15 +7,9 @@ import {
 import { Button, Input, Modal, Select, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  appointmentProjectTypeLabels,
-  roundOptions,
-  sessionOptions,
-  taskProjectTypes
-} from '../constants/appointment';
-import {
   Appointment,
   AppointmentPayload,
-  AppointmentProjectType
+  AppointmentTaskConfig
 } from '../types/appointment';
 import { Teacher, Volunteer } from '../types/volunteer';
 import { teacherLabels } from '../constants/volunteer';
@@ -27,21 +21,15 @@ interface AppointmentFormModalProps {
   time: string;
   date: string;
   appointment?: Appointment | null;
+  taskConfigs: AppointmentTaskConfig[];
   volunteers: Volunteer[];
   confirmLoading?: boolean;
   onCancel: () => void;
   onSubmit: (payload: AppointmentPayload) => Promise<void>;
 }
 
-const projectButtonClass: Record<AppointmentProjectType, string> = {
-  MRI: 'project-blue',
-  EEG: 'project-teal',
-  COGNITION: 'project-green',
-  INTERVIEW: 'project-yellow',
-  PARENT_INTERVIEW: 'project-yellow',
-  FORMAL_TEST: 'project-green',
-  OTHER: 'project-blue'
-};
+const projectButtonClasses = ['project-blue', 'project-teal', 'project-green', 'project-yellow'];
+const chineseRoundNumbers = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
 
 function getTeacherName(teacher?: Teacher | null) {
   return teacher ? teacherLabels[teacher] : '未分配老师';
@@ -52,15 +40,16 @@ export function AppointmentFormModal({
   time,
   date,
   appointment,
+  taskConfigs,
   volunteers,
   confirmLoading,
   onCancel,
   onSubmit
 }: AppointmentFormModalProps) {
   const [step, setStep] = useState<WizardStep>('project');
-  const [projectType, setProjectType] = useState<AppointmentProjectType>('COGNITION');
-  const [session, setSession] = useState('Session 1');
-  const [round, setRound] = useState('第一轮');
+  const [projectName, setProjectName] = useState('');
+  const [session, setSession] = useState<string | null>(null);
+  const [round, setRound] = useState<string | null>(null);
   const [volunteerId, setVolunteerId] = useState<number | null>(null);
   const [remark, setRemark] = useState('');
 
@@ -68,6 +57,15 @@ export function AppointmentFormModal({
     () => volunteers.find((volunteer) => volunteer.id === volunteerId) ?? null,
     [volunteerId, volunteers]
   );
+  const selectedTaskConfig = useMemo(
+    () => taskConfigs.find((config) => config.name === projectName) ?? null,
+    [projectName, taskConfigs]
+  );
+  const sessionSelectOptions = (selectedTaskConfig?.sessions ?? []).map((value) => ({ value, label: value }));
+  const roundSelectOptions = (selectedTaskConfig?.rounds ?? []).map((value) => {
+    const label = `第${chineseRoundNumbers[value - 1] ?? value}轮`;
+    return { value: label, label };
+  });
 
   useEffect(() => {
     if (!open) {
@@ -76,33 +74,30 @@ export function AppointmentFormModal({
 
     if (appointment) {
       setStep('subject');
-      setProjectType(appointment.projectType);
-      setSession(appointment.session || 'Session 1');
-      setRound(appointment.round || '第一轮');
+      setProjectName(appointment.projectName || '');
+      setSession(appointment.session ?? null);
+      setRound(appointment.round ?? null);
       setVolunteerId(appointment.volunteerId);
       setRemark(appointment.remark ?? '');
       return;
     }
 
     setStep('project');
-    setProjectType('COGNITION');
-    setSession('Session 1');
-    setRound('第一轮');
+    setProjectName('');
+    setSession(null);
+    setRound(null);
     setVolunteerId(null);
     setRemark('');
   }, [appointment, open]);
 
   async function handleFinalSubmit() {
-    if (!selectedVolunteer) {
-      return;
-    }
-
     await onSubmit({
-      volunteerId: selectedVolunteer.id,
-      subjectName: selectedVolunteer.name,
+      volunteerId: selectedVolunteer?.id ?? null,
+      subjectName: selectedVolunteer?.name ?? '',
       date,
       time,
-      projectType,
+      projectType: 'OTHER',
+      projectName,
       session,
       round,
       remark: remark.trim() || null,
@@ -135,7 +130,7 @@ export function AppointmentFormModal({
   const title = step === 'project'
     ? '请选择任务种类'
     : step === 'session'
-      ? `请选择${appointmentProjectTypeLabels[projectType]}任务`
+      ? `请选择${projectName || '任务'}信息`
       : '请选择被试';
 
   return (
@@ -163,16 +158,18 @@ export function AppointmentFormModal({
         <div className="wizard-body">
           {step === 'project' ? (
             <div className="wizard-project-grid">
-              {taskProjectTypes.map((type) => (
+              {taskConfigs.map((config, index) => (
                 <Button
-                  key={type}
-                  className={`wizard-project-button ${projectButtonClass[type]}`}
+                  key={config.id}
+                  className={`wizard-project-button ${projectButtonClasses[index % projectButtonClasses.length]}`}
                   onClick={() => {
-                    setProjectType(type);
+                    setProjectName(config.name);
+                    setSession(null);
+                    setRound(null);
                     setStep('session');
                   }}
                 >
-                  {appointmentProjectTypeLabels[type]}
+                  {config.name}
                 </Button>
               ))}
             </div>
@@ -181,25 +178,23 @@ export function AppointmentFormModal({
           {step === 'session' ? (
             <>
               <Select
-                value={round}
-                options={roundOptions}
-                onChange={setRound}
+                value={session}
+                options={sessionSelectOptions}
+                onChange={setSession}
+                allowClear
+                placeholder="选择 Session（可选）"
                 className="wizard-session-select"
                 suffixIcon={<span>&lt;</span>}
               />
-              <div className="wizard-session-grid">
-                {sessionOptions.map((item) => (
-                  <Button
-                    key={item.value}
-                    className={`wizard-project-button ${projectButtonClass[projectType]}`}
-                    onClick={() => {
-                      setSession(item.value);
-                    }}
-                  >
-                    {item.label}
-                  </Button>
-                ))}
-              </div>
+              <Select
+                value={round}
+                options={roundSelectOptions}
+                onChange={setRound}
+                allowClear
+                placeholder="选择轮数（可选）"
+                className="wizard-session-select wizard-round-select"
+                suffixIcon={<span>&lt;</span>}
+              />
               <Button
                 className="wizard-confirm-button"
                 type="primary"
@@ -217,6 +212,7 @@ export function AppointmentFormModal({
                   value={volunteerId}
                   showSearch
                   placeholder="请选择被试"
+                  allowClear
                   optionFilterProp="label"
                   onChange={setVolunteerId}
                   className="wizard-subject-select"
@@ -225,18 +221,6 @@ export function AppointmentFormModal({
                     label: `${volunteer.name}（${getTeacherName(volunteer.teacher)}）`
                   }))}
                 />
-                <div className="wizard-subject-list">
-                  {volunteers.slice(0, 10).map((volunteer) => (
-                    <button
-                      key={volunteer.id}
-                      type="button"
-                      className={volunteer.id === volunteerId ? 'selected' : ''}
-                      onClick={() => setVolunteerId(volunteer.id)}
-                    >
-                      {volunteer.name}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <div className="wizard-remark-box">
@@ -254,7 +238,6 @@ export function AppointmentFormModal({
                 className="wizard-confirm-button subject"
                 type="primary"
                 loading={confirmLoading}
-                disabled={!selectedVolunteer}
                 onClick={handleFinalSubmit}
               >
                 确认

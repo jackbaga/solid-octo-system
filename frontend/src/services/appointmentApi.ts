@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Appointment, AppointmentPayload } from '../types/appointment';
+import { Appointment, AppointmentPayload, AppointmentTaskConfig, AppointmentTaskConfigPayload } from '../types/appointment';
 
 const api = axios.create({
   baseURL: '/api'
@@ -25,6 +25,16 @@ export async function updateAppointment(id: number, payload: AppointmentPayload)
 
 export async function deleteAppointment(id: number) {
   await api.delete(`/appointments/${id}`);
+}
+
+export async function fetchAppointmentTaskConfigs() {
+  const response = await api.get<AppointmentTaskConfig[]>('/appointments/task-configs');
+  return response.data;
+}
+
+export async function saveAppointmentTaskConfigs(configs: AppointmentTaskConfigPayload[]) {
+  const response = await api.put<AppointmentTaskConfig[]>('/appointments/task-configs', { configs });
+  return response.data;
 }
 
 export async function fetchAppointmentDay(date: string) {

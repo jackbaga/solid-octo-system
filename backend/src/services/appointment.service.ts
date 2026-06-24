@@ -3,12 +3,13 @@ import { prisma } from '../prisma/client.js';
 
 export interface AppointmentInput {
   volunteerId?: number | null;
-  subjectName: string;
+  subjectName?: string;
   date: string;
   time: string;
-  projectType: AppointmentProjectType;
-  session?: string;
-  round?: string;
+  projectType?: AppointmentProjectType;
+  projectName?: string | null;
+  session?: string | null;
+  round?: string | null;
   remark?: string | null;
   status?: AppointmentStatus;
 }
@@ -19,10 +20,17 @@ export interface AppointmentUpdateInput {
   date?: string;
   time?: string;
   projectType?: AppointmentProjectType;
-  session?: string;
-  round?: string;
+  projectName?: string | null;
+  session?: string | null;
+  round?: string | null;
   remark?: string | null;
   status?: AppointmentStatus;
+}
+
+export interface AppointmentTaskConfigInput {
+  name: string;
+  sessions: string[];
+  rounds: number[];
 }
 
 const appointmentInclude = {
@@ -72,12 +80,13 @@ export async function createAppointment(input: AppointmentInput) {
     const appointment = await tx.appointment.create({
       data: {
         volunteerId: input.volunteerId ?? null,
-        subjectName: input.subjectName,
+        subjectName: input.subjectName ?? '',
         date: input.date,
         time: input.time,
-        projectType: input.projectType,
-        session: input.session ?? 'Session 1',
-        round: input.round ?? '第一轮',
+        projectType: input.projectType ?? AppointmentProjectType.OTHER,
+        projectName: input.projectName ?? null,
+        session: input.session ?? null,
+        round: input.round ?? null,
         remark: input.remark ?? null,
         status: input.status ?? AppointmentStatus.BOOKED
       },
@@ -111,8 +120,9 @@ export async function updateAppointment(id: number, input: AppointmentUpdateInpu
         ...('date' in input ? { date: input.date } : {}),
         ...('time' in input ? { time: input.time } : {}),
         ...('projectType' in input ? { projectType: input.projectType } : {}),
-        ...('session' in input ? { session: input.session } : {}),
-        ...('round' in input ? { round: input.round } : {}),
+        ...('projectName' in input ? { projectName: input.projectName ?? null } : {}),
+        ...('session' in input ? { session: input.session ?? null } : {}),
+        ...('round' in input ? { round: input.round ?? null } : {}),
         ...('remark' in input ? { remark: input.remark ?? null } : {}),
         ...('status' in input ? { status: input.status } : {})
       },
@@ -132,6 +142,49 @@ export async function updateAppointment(id: number, input: AppointmentUpdateInpu
 
 export async function deleteAppointment(id: number) {
   await prisma.appointment.delete({ where: { id } });
+}
+
+const defaultTaskConfigs: AppointmentTaskConfigInput[] = ['磁共振', '脑电', '认知', '访谈'].map((name) => ({
+  name,
+  sessions: ['Session 1', 'Session 2', 'Session 3', 'Session 4', 'Session 5'],
+  rounds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+}));
+
+export async function listAppointmentTaskConfigs() {
+  const configs = await prisma.appointmentTaskConfig.findMany({
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }]
+  });
+
+  if (configs.length > 0) {
+    return configs;
+  }
+
+  await prisma.appointmentTaskConfig.createMany({
+    data: defaultTaskConfigs.map((config, index) => ({
+      ...config,
+      sortOrder: index + 1
+    }))
+  });
+
+  return prisma.appointmentTaskConfig.findMany({
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }]
+  });
+}
+
+export async function replaceAppointmentTaskConfigs(configs: AppointmentTaskConfigInput[]) {
+  await prisma.$transaction(async (tx) => {
+    await tx.appointmentTaskConfig.deleteMany();
+    await tx.appointmentTaskConfig.createMany({
+      data: configs.map((config, index) => ({
+        name: config.name,
+        sessions: config.sessions,
+        rounds: config.rounds,
+        sortOrder: index + 1
+      }))
+    });
+  });
+
+  return listAppointmentTaskConfigs();
 }
 
 export async function getAppointmentDay(date: string) {

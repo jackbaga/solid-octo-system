@@ -43,13 +43,14 @@ model Appointment {
   volunteerId Int?
   volunteer   Volunteer? @relation(fields: [volunteerId], references: [id])
 
-  subjectName String
+  subjectName String @default("")
   date        String
   time        String
 
   projectType AppointmentProjectType
-  session     String @default("Session 1")
-  round       String @default("第一轮")
+  projectName String?
+  session     String?
+  round       String?
   remark      String?
   status      AppointmentStatus @default(BOOKED)
   taskCompletion TaskCompletion?
@@ -59,6 +60,16 @@ model Appointment {
 
   @@index([date])
   @@index([volunteerId])
+}
+
+model AppointmentTaskConfig {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  sessions  String[] @default([])
+  rounds    Int[]    @default([])
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model AppointmentDay {
@@ -79,6 +90,21 @@ model TaskCompletion {
   updatedAt     DateTime    @updatedAt
 
   @@index([date])
+}
+
+model TaskCompletionRecord {
+  id                    Int      @id @default(autoincrement())
+  subjectName           String
+  subjectCode           String   @default("")
+  paymentStatus         String?
+  cognitiveReportStatus String?
+  remark                String?
+  tasks                 Json     @default("{}")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([subjectName, subjectCode])
+  @@index([subjectName])
 }
 
 enum VolunteerStatus {

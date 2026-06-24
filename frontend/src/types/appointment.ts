@@ -18,8 +18,9 @@ export interface Appointment {
   date: string;
   time: string;
   projectType: AppointmentProjectType;
-  session: string;
-  round: string;
+  projectName: string | null;
+  session: string | null;
+  round: string | null;
   remark: string | null;
   status: AppointmentStatus;
   taskCompletion: {
@@ -36,12 +37,29 @@ export interface Appointment {
 
 export interface AppointmentPayload {
   volunteerId?: number | null;
-  subjectName: string;
+  subjectName?: string;
   date: string;
   time: string;
-  projectType: AppointmentProjectType;
-  session?: string;
-  round?: string;
+  projectType?: AppointmentProjectType;
+  projectName?: string | null;
+  session?: string | null;
+  round?: string | null;
   remark?: string | null;
   status?: AppointmentStatus;
+}
+
+export interface AppointmentTaskConfig {
+  id: number;
+  name: string;
+  sessions: string[];
+  rounds: number[];
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppointmentTaskConfigPayload {
+  name: string;
+  sessions: string[];
+  rounds: number[];
 }

@@ -3,6 +3,7 @@ import express from 'express';
 import multer from 'multer';
 import { Prisma } from '@prisma/client';
 import { appointmentRouter } from './routes/appointment.routes.js';
+import { taskCompletionRouter } from './routes/taskCompletion.routes.js';
 import { volunteerRouter } from './routes/volunteer.routes.js';
 
 export const app = express();
@@ -16,6 +17,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/volunteers', volunteerRouter);
 app.use('/api/appointments', appointmentRouter);
+app.use('/api/task-completion', taskCompletionRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof multer.MulterError) {

@@ -194,6 +194,11 @@ body {
   padding-inline: 6px;
 }
 
+.editable-completion-tag {
+  cursor: pointer;
+  user-select: none;
+}
+
 .placeholder-content {
   min-height: calc(100vh - 72px);
   display: flex;
@@ -338,6 +343,25 @@ body {
 
 .appointment-list {
   width: 100%;
+}
+
+.task-session-editor {
+  margin: 8px 0 14px;
+}
+
+.task-session-editor .ant-space-item:first-child {
+  flex: 1;
+}
+
+.task-session-editor .ant-input {
+  min-width: 220px;
+}
+
+.task-round-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(80px, 1fr));
+  gap: 8px;
 }
 
 .summary-check-row {
@@ -1075,12 +1099,14 @@ body {
 
 .wizard-window {
   min-height: 620px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .wizard-titlebar {
   height: 74px;
   padding: 0 24px;
-  background: #edf2f7;
+  background: #eaf1f8;
+  border-bottom: 1px solid var(--line);
   gap: 16px;
 }
 
@@ -1099,6 +1125,7 @@ body {
   margin-left: 12px;
   font-size: 34px;
   color: var(--text);
+  font-weight: 800;
 }
 
 .wizard-body {
@@ -1108,9 +1135,9 @@ body {
 
 .wizard-project-grid,
 .wizard-session-grid {
-  margin-top: 120px;
+  margin-top: 96px;
   grid-template-columns: repeat(4, 150px);
-  gap: 78px;
+  gap: 54px;
 }
 
 .wizard-project-button.ant-btn {
@@ -1118,6 +1145,7 @@ body {
   height: 92px;
   border-radius: 10px;
   font-size: 28px;
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.12);
 }
 
 .wizard-project-button.project-blue {
@@ -1140,6 +1168,10 @@ body {
 .wizard-session-select.ant-select {
   width: 200px;
   margin-left: 60px;
+}
+
+.wizard-round-select.ant-select {
+  margin-left: 16px;
 }
 
 .wizard-session-select .ant-select-selector {
@@ -1168,12 +1200,17 @@ body {
 
 .wizard-subject-layout {
   min-height: 460px;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 48px;
+  grid-template-columns: minmax(320px, 1fr) minmax(300px, 360px);
+  gap: 36px;
+  align-items: stretch;
 }
 
 .wizard-subject-picker {
-  padding-top: 24px;
+  padding: 44px 32px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
 }
 
 .wizard-subject-select .ant-select-selector {
@@ -1187,20 +1224,12 @@ body {
   line-height: 50px !important;
 }
 
-.wizard-subject-list {
-  width: 360px;
-  margin-left: 180px;
-}
-
-.wizard-subject-list button {
-  height: 40px;
-  font-size: 20px;
-}
-
 .wizard-remark-box {
-  min-height: 330px;
+  min-height: 280px;
   border-color: var(--line);
-  border-radius: 6px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
 }
 
 .wizard-remark-box .ant-typography {

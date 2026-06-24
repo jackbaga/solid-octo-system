@@ -4,13 +4,16 @@ import {
   EditOutlined,
   LeftOutlined,
   PlusOutlined,
-  RightOutlined
+  RightOutlined,
+  SettingOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs, { Dayjs } from 'dayjs';
 import {
   Button,
   Card,
+  Checkbox,
+  Input,
   Layout,
   message,
   Modal,
@@ -18,6 +21,7 @@ import {
   Segmented,
   Select,
   Space,
+  Table,
   Tag,
   Typography
 } from 'antd';
@@ -34,13 +38,16 @@ import {
   deleteAppointment,
   exportAppointmentCredentials,
   fetchAppointmentDay,
+  fetchAppointmentTaskConfigs,
   fetchAppointments,
+  saveAppointmentTaskConfigs,
   syncAppointmentDaySummary,
   updateAppointmentDay,
   updateAppointment
 } from '../services/appointmentApi';
+import { syncTaskCompletionFromAppointments } from '../services/taskCompletionApi';
 import { fetchVolunteers } from '../services/volunteerApi';
-import { Appointment, AppointmentPayload } from '../types/appointment';
+import { Appointment, AppointmentPayload, AppointmentTaskConfig, AppointmentTaskConfigPayload } from '../types/appointment';
 import { Volunteer } from '../types/volunteer';
 import { teacherLabels } from '../constants/volunteer';
 
@@ -105,16 +112,30 @@ function formatAppointmentSummary(appointment: Appointment) {
     ? teacherLabels[appointment.volunteer.teacher]
     : '未分配老师';
   const remark = appointment.remark ? `，${appointment.remark}` : '';
-  const session = appointment.session || 'Session 1';
-  const round = appointment.round || '第一轮';
+  const session = appointment.session ? `，${appointment.session}` : '';
+  const round = appointment.round ? `，${appointment.round}` : '';
+  const subjectName = appointment.subjectName || '未选择被试';
+  const projectName = appointment.projectName || appointmentProjectTypeLabels[appointment.projectType];
 
-  return `${appointmentProjectTypeLabels[appointment.projectType]}：${appointment.subjectName}（${teacherName}，${session}，${round}${remark}）`;
+  return `${projectName}：${subjectName}（${teacherName}${session}${round}${remark}）`;
+}
+
+function createDefaultTaskConfig(): AppointmentTaskConfigPayload {
+  return {
+    name: '新任务',
+    sessions: ['Session 1', 'Session 2', 'Session 3', 'Session 4', 'Session 5'],
+    rounds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  };
 }
 
 export function AppointmentPage() {
   const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs());
   const [customTimes, setCustomTimes] = useState<string[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [taskConfigs, setTaskConfigs] = useState<AppointmentTaskConfig[]>([]);
+  const [taskSettingsOpen, setTaskSettingsOpen] = useState(false);
+  const [taskSettingsLoading, setTaskSettingsLoading] = useState(false);
+  const [draftTaskConfigs, setDraftTaskConfigs] = useState<AppointmentTaskConfigPayload[]>([]);
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
   const [assistants, setAssistants] = useState<string[]>([]);
   const [calendarView, setCalendarView] = useState<CalendarView>('week');
@@ -124,6 +145,9 @@ export function AppointmentPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [timeModalOpen, setTimeModalOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [completionExportOpen, setCompletionExportOpen] = useState(false);
+  const [completionExportLoading, setCompletionExportLoading] = useState(false);
+  const [completionCheckedIds, setCompletionCheckedIds] = useState<number[]>([]);
   const [incompleteIds, setIncompleteIds] = useState<number[]>([]);
   const [activeTime, setActiveTime] = useState('');
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
@@ -151,8 +175,10 @@ export function AppointmentPage() {
         fetchVolunteers('ALL')
       ]);
       const dayData = await fetchAppointmentDay(date);
+      const configData = await fetchAppointmentTaskConfigs();
       setAppointments(appointmentData);
       setVolunteers(volunteerData);
+      setTaskConfigs(configData);
       setAssistants(dayData.assistants);
     } catch (error) {
       messageApi.error(getErrorMessage(error));
@@ -255,6 +281,38 @@ export function AppointmentPage() {
     }
   }
 
+  function openCompletionExportModal() {
+    setCompletionCheckedIds(
+      appointments
+        .filter((appointment) => appointment.session)
+        .map((appointment) => appointment.id)
+    );
+    setCompletionExportOpen(true);
+  }
+
+  async function handleSyncCompletionExport() {
+    setCompletionExportLoading(true);
+    try {
+      const result = await syncTaskCompletionFromAppointments(
+        appointments
+          .filter((appointment) => appointment.session)
+          .map((appointment) => ({
+            subjectName: appointment.subjectName || appointment.volunteer?.name || '未选择被试',
+            subjectCode: appointment.volunteer?.account ?? '',
+            taskName: `${appointment.round || '第一轮'}-${appointment.projectName || appointmentProjectTypeLabels[appointment.projectType]}`,
+            session: appointment.session,
+            completed: completionCheckedIds.includes(appointment.id)
+          }))
+      );
+      setCompletionExportOpen(false);
+      messageApi.success(`已同步 ${result.touched} 条任务完成状态`);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setCompletionExportLoading(false);
+    }
+  }
+
   function openSummaryModal() {
     setIncompleteIds(
       appointments
@@ -262,6 +320,103 @@ export function AppointmentPage() {
         .map((appointment) => appointment.id)
     );
     setSummaryOpen(true);
+  }
+
+  function openTaskSettings() {
+    setDraftTaskConfigs(
+      taskConfigs.map((config) => ({
+        name: config.name,
+        sessions: [...config.sessions],
+        rounds: [...config.rounds]
+      }))
+    );
+    setTaskSettingsOpen(true);
+  }
+
+  function updateDraftTask(index: number, patch: Partial<AppointmentTaskConfigPayload>) {
+    setDraftTaskConfigs((current) =>
+      current.map((config, itemIndex) => itemIndex === index ? { ...config, ...patch } : config)
+    );
+  }
+
+  function addDraftTask() {
+    setDraftTaskConfigs((current) => [...current, createDefaultTaskConfig()]);
+  }
+
+  function removeDraftTask(index: number) {
+    setDraftTaskConfigs((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function updateDraftSession(taskIndex: number, sessionIndex: number, value: string) {
+    setDraftTaskConfigs((current) =>
+      current.map((config, itemIndex) => {
+        if (itemIndex !== taskIndex) {
+          return config;
+        }
+
+        const sessions = config.sessions.map((session, index) => index === sessionIndex ? value : session);
+        return { ...config, sessions };
+      })
+    );
+  }
+
+  function addDraftSession(taskIndex: number) {
+    setDraftTaskConfigs((current) =>
+      current.map((config, itemIndex) => {
+        if (itemIndex !== taskIndex) {
+          return config;
+        }
+
+        return { ...config, sessions: [...config.sessions, `Session ${config.sessions.length + 1}`] };
+      })
+    );
+  }
+
+  function removeDraftSession(taskIndex: number, sessionIndex: number) {
+    setDraftTaskConfigs((current) =>
+      current.map((config, itemIndex) => {
+        if (itemIndex !== taskIndex) {
+          return config;
+        }
+
+        return { ...config, sessions: config.sessions.filter((_, index) => index !== sessionIndex) };
+      })
+    );
+  }
+
+  function toggleDraftRound(taskIndex: number, round: number, checked: boolean) {
+    setDraftTaskConfigs((current) =>
+      current.map((config, itemIndex) => {
+        if (itemIndex !== taskIndex) {
+          return config;
+        }
+
+        const rounds = checked
+          ? Array.from(new Set([...config.rounds, round])).sort((a, b) => a - b)
+          : config.rounds.filter((item) => item !== round);
+        return { ...config, rounds };
+      })
+    );
+  }
+
+  async function handleSaveTaskSettings() {
+    const configs = draftTaskConfigs.map((config) => ({
+      name: config.name.trim(),
+      sessions: config.sessions.map((session) => session.trim()).filter(Boolean),
+      rounds: config.rounds
+    }));
+
+    setTaskSettingsLoading(true);
+    try {
+      const savedConfigs = await saveAppointmentTaskConfigs(configs);
+      setTaskConfigs(savedConfigs);
+      setTaskSettingsOpen(false);
+      messageApi.success('任务设置已保存');
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setTaskSettingsLoading(false);
+    }
   }
 
   async function handleConfirmSummary() {
@@ -487,10 +642,13 @@ export function AppointmentPage() {
           CCBD-北大站点
         </Typography.Title>
         <Space className="calendar-top-actions">
+          <Button icon={<SettingOutlined />} onClick={openTaskSettings}>
+            设置
+          </Button>
           <Button onClick={handleExportCredentials}>
             账号密码
           </Button>
-          <Button onClick={handleExportCredentials}>
+          <Button onClick={openCompletionExportModal}>
             导出
           </Button>
         </Space>
@@ -569,11 +727,153 @@ export function AppointmentPage() {
         time={activeTime}
         date={selectedDateText}
         appointment={editingAppointment}
+        taskConfigs={taskConfigs}
         volunteers={volunteers}
         confirmLoading={modalLoading}
         onCancel={closeModal}
         onSubmit={handleSubmit}
       />
+
+      <Modal
+        title="任务设置"
+        open={taskSettingsOpen}
+        width={860}
+        confirmLoading={taskSettingsLoading}
+        onCancel={() => setTaskSettingsOpen(false)}
+        onOk={handleSaveTaskSettings}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Space direction="vertical" size={14} className="appointment-list">
+          {draftTaskConfigs.map((config, taskIndex) => (
+            <Card
+              key={taskIndex}
+              size="small"
+              title={
+                <Input
+                  value={config.name}
+                  placeholder="任务名称"
+                  onChange={(event) => updateDraftTask(taskIndex, { name: event.target.value })}
+                />
+              }
+              extra={
+                <Button
+                  danger
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  disabled={draftTaskConfigs.length <= 1}
+                  onClick={() => removeDraftTask(taskIndex)}
+                />
+              }
+            >
+              <Typography.Text strong>Session</Typography.Text>
+              <Space direction="vertical" size={8} className="appointment-list task-session-editor">
+                {config.sessions.map((session, sessionIndex) => (
+                  <Space key={sessionIndex}>
+                    <Input
+                      value={session}
+                      placeholder="Session 名称"
+                      onChange={(event) => updateDraftSession(taskIndex, sessionIndex, event.target.value)}
+                    />
+                    <Button
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      onClick={() => removeDraftSession(taskIndex, sessionIndex)}
+                    />
+                  </Space>
+                ))}
+                <Button size="small" icon={<PlusOutlined />} onClick={() => addDraftSession(taskIndex)}>
+                  新增 Session
+                </Button>
+              </Space>
+
+              <Typography.Text strong>可选轮数</Typography.Text>
+              <div className="task-round-grid">
+                {Array.from({ length: 10 }, (_, index) => index + 1).map((round) => (
+                  <Checkbox
+                    key={round}
+                    checked={config.rounds.includes(round)}
+                    onChange={(event) => toggleDraftRound(taskIndex, round, event.target.checked)}
+                  >
+                    第{round}轮
+                  </Checkbox>
+                ))}
+              </div>
+            </Card>
+          ))}
+          <Button icon={<PlusOutlined />} onClick={addDraftTask}>
+            新增任务
+          </Button>
+        </Space>
+      </Modal>
+
+      <Modal
+        title="导出当日任务完成状态"
+        open={completionExportOpen}
+        width={820}
+        confirmLoading={completionExportLoading}
+        onCancel={() => setCompletionExportOpen(false)}
+        onOk={handleSyncCompletionExport}
+        okText="导出到任务完成度"
+        cancelText="取消"
+      >
+        <Typography.Paragraph type="secondary">
+          勾选表示该预约的 session 已完成。确认后会同步到任务完成度页面；当同一任务下所有 session 都完成时，任务会自动标记为完成。
+        </Typography.Paragraph>
+        <Table
+          rowKey="id"
+          size="small"
+          pagination={false}
+          dataSource={appointments.filter((appointment) => appointment.session)}
+          columns={[
+            {
+              title: '完成',
+              key: 'completed',
+              width: 72,
+              render: (_: unknown, record: Appointment) => (
+                <input
+                  type="checkbox"
+                  checked={completionCheckedIds.includes(record.id)}
+                  onChange={(event) => {
+                    setCompletionCheckedIds((current) =>
+                      event.target.checked
+                        ? [...current, record.id]
+                        : current.filter((id) => id !== record.id)
+                    );
+                  }}
+                />
+              )
+            },
+            {
+              title: '时间',
+              dataIndex: 'time',
+              key: 'time',
+              width: 90
+            },
+            {
+              title: '被试',
+              key: 'subjectName',
+              render: (_: unknown, record: Appointment) => record.subjectName || record.volunteer?.name || '未选择被试'
+            },
+            {
+              title: '编号',
+              key: 'subjectCode',
+              render: (_: unknown, record: Appointment) => record.volunteer?.account || '-'
+            },
+            {
+              title: '任务',
+              key: 'taskName',
+              render: (_: unknown, record: Appointment) => record.projectName || appointmentProjectTypeLabels[record.projectType]
+            },
+            {
+              title: 'Session',
+              dataIndex: 'session',
+              key: 'session'
+            }
+          ]}
+        />
+      </Modal>
 
       <Modal
         title="新增时间段"
