@@ -120,3 +120,59 @@ http://localhost:5173
 ```
 
 Vite 开发服务器会将 `/api` 请求代理到 `http://localhost:4000`。
+
+## Docker 部署
+
+项目已包含生产部署用的 Docker 配置：
+
+```text
+postgres  PostgreSQL 数据库
+backend   Express + Prisma 后端
+frontend  Nginx 静态前端，同时反向代理 /api
+```
+
+首次部署：
+
+```bash
+cp .env.example .env
+```
+
+编辑根目录 `.env`，把 `AUTH_SECRET` 改成足够长的随机字符串。然后启动：
+
+```bash
+docker compose up -d --build
+```
+
+访问地址：
+
+```text
+http://localhost
+```
+
+查看运行状态：
+
+```bash
+docker compose ps
+docker compose logs -f backend
+docker compose logs -f frontend
+```
+
+停止服务：
+
+```bash
+docker compose down
+```
+
+保留数据库数据时不要删除 volume。若确实需要清空数据库：
+
+```bash
+docker compose down -v
+```
+
+后端容器启动时会自动执行：
+
+```bash
+npx prisma migrate deploy
+```
+
+所以服务器部署时不需要手动进入容器跑迁移。
