@@ -6,6 +6,7 @@ import {
   getAppointmentDay,
   isValidAppointmentProjectType,
   isValidAppointmentStatus,
+  listAppointmentDays,
   listAppointmentTaskConfigs,
   listAppointments,
   replaceAppointmentTaskConfigs,
@@ -13,6 +14,7 @@ import {
   updateAppointmentDay,
   updateAppointment
 } from '../services/appointment.service.js';
+import { listTaskCompletionRecords } from '../services/taskCompletion.service.js';
 
 function parseId(value: string) {
   const id = Number(value);
@@ -89,6 +91,50 @@ function normalizeOptionalText(value: unknown) {
   return text || null;
 }
 
+const teacherLabels = {
+  WANG_LE: '王乐老师',
+  WEI_SHIYIN: '魏诗荫老师'
+} as const;
+
+function normalizeSubjectName(name: string) {
+  return name.trim().replace(/\s+/g, '');
+}
+
+function formatExportDate(date: string) {
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) {
+    return date;
+  }
+
+  return `${match[1]}.${Number(match[2])}.${Number(match[3])}`;
+}
+
+function formatAppointmentExportSummary(
+  appointment: Awaited<ReturnType<typeof listAppointments>>[number],
+  taskCompletionRecords: Awaited<ReturnType<typeof listTaskCompletionRecords>>
+) {
+  const subjectName = appointment.subjectName || appointment.volunteer?.name || '未选择被试';
+  const normalizedSubjectName = normalizeSubjectName(subjectName);
+  const taskCompletionTeacher = taskCompletionRecords.find(
+    (record) => normalizeSubjectName(record.subjectName) === normalizedSubjectName
+  )?.assignedTeacher;
+  const teacher = taskCompletionTeacher ?? appointment.volunteer?.teacher ?? null;
+  const teacherName = teacher ? teacherLabels[teacher] : '未分配老师';
+  const detailParts = [
+    teacherName,
+    appointment.session,
+    appointment.round,
+    appointment.remark
+  ].filter(Boolean);
+
+  return `${subjectName}（${detailParts.join('，')}）`;
+}
+
+function getAppointmentTaskName(appointment: Awaited<ReturnType<typeof listAppointments>>[number]) {
+  return appointment.projectName || String(appointment.projectType);
+}
+
 function validateTaskConfigBody(body: Record<string, unknown>) {
   if (!Array.isArray(body.configs)) {
     return { errors: ['任务配置格式无效。'], configs: [] };
@@ -105,6 +151,24 @@ function validateTaskConfigBody(body: Record<string, unknown>) {
     const rounds = Array.isArray(record.rounds)
       ? Array.from(new Set(record.rounds.map(Number).filter((round) => Number.isInteger(round) && round >= 1 && round <= 10))).sort((a, b) => a - b)
       : [];
+    const rawRoundSessions = record.roundSessions && typeof record.roundSessions === 'object'
+      ? record.roundSessions as Record<string, unknown>
+      : {};
+    const roundSessions = Object.fromEntries(
+      Array.from({ length: 10 }, (_, roundIndex) => {
+        const round = String(roundIndex + 1);
+        const roundValue = rawRoundSessions[round];
+        const roundSessionList = Array.isArray(roundValue)
+          ? roundValue.map((session) => String(session).trim()).filter(Boolean)
+          : sessions;
+        return [round, roundSessionList];
+      })
+    );
+    const enabledRounds = rounds.length
+      ? rounds
+      : Object.entries(roundSessions)
+          .filter(([, roundSessionList]) => roundSessionList.length > 0)
+          .map(([round]) => Number(round));
 
     if (!name) {
       errors.push(`第 ${index + 1} 个任务缺少名称。`);
@@ -115,7 +179,12 @@ function validateTaskConfigBody(body: Record<string, unknown>) {
     }
 
     names.add(name);
-    return { name, sessions, rounds };
+    return {
+      name,
+      sessions,
+      rounds: enabledRounds,
+      roundSessions
+    };
   });
 
   if (configs.length === 0) {
@@ -200,6 +269,68 @@ export async function exportAppointmentCredentials(req: Request, res: Response) 
     type: 'buffer'
   });
   const filename = encodeURIComponent(`${date}-预约账号密码.xlsx`);
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);
+  return res.send(buffer);
+}
+
+export async function exportAppointments(req: Request, res: Response) {
+  const date = typeof req.query.date === 'string' ? req.query.date : undefined;
+  const [appointments, appointmentDays, taskCompletionRecords] = await Promise.all([
+    listAppointments(date),
+    listAppointmentDays(),
+    listTaskCompletionRecords()
+  ]);
+  const sortedAppointments = [...appointments].sort((a, b) =>
+    a.date.localeCompare(b.date) ||
+    a.time.localeCompare(b.time) ||
+    a.createdAt.getTime() - b.createdAt.getTime()
+  );
+  const assistantsByDate = new Map(appointmentDays.map((day) => [day.date, day.assistants]));
+  const groupedAppointments = new Map<string, typeof sortedAppointments>();
+
+  for (const appointment of sortedAppointments) {
+    const group = groupedAppointments.get(appointment.date) ?? [];
+    group.push(appointment);
+    groupedAppointments.set(appointment.date, group);
+  }
+
+  const rows: unknown[][] = [['日期', '任务', '志愿者', '实验助理']];
+  const merges: XLSX.Range[] = [];
+
+  for (const [appointmentDate, dayAppointments] of groupedAppointments) {
+    const startRow = rows.length;
+    const assistants = assistantsByDate.get(appointmentDate)?.join('、') ?? '';
+    const exportRows = dayAppointments.length > 0 ? dayAppointments : [null];
+
+    for (const appointment of exportRows) {
+      rows.push([
+        formatExportDate(appointmentDate),
+        appointment ? getAppointmentTaskName(appointment) : '',
+        appointment ? formatAppointmentExportSummary(appointment, taskCompletionRecords) : '',
+        assistants
+      ]);
+    }
+
+    const endRow = rows.length - 1;
+
+    if (endRow > startRow) {
+      merges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } });
+      merges.push({ s: { r: startRow, c: 3 }, e: { r: endRow, c: 3 } });
+    }
+  }
+
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  worksheet['!merges'] = merges;
+  worksheet['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 44 }, { wch: 28 }];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, '预约安排');
+  const buffer = XLSX.write(workbook, {
+    bookType: 'xlsx',
+    type: 'buffer'
+  });
+  const filename = encodeURIComponent(date ? `${date}-预约安排.xlsx` : '预约安排.xlsx');
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);

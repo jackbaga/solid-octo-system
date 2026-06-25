@@ -31,6 +31,7 @@ export interface AppointmentTaskConfigInput {
   name: string;
   sessions: string[];
   rounds: number[];
+  roundSessions: Record<string, string[]>;
 }
 
 const appointmentInclude = {
@@ -75,6 +76,45 @@ export async function listAppointments(date?: string) {
   });
 }
 
+async function syncAssignedTeacherFromAppointment(
+  tx: Prisma.TransactionClient,
+  subjectName: string,
+  volunteerId?: number | null
+) {
+  const normalizedName = subjectName.trim();
+
+  if (!normalizedName || !volunteerId) {
+    return;
+  }
+
+  const volunteer = await tx.volunteer.findUnique({
+    where: { id: volunteerId },
+    select: { teacher: true }
+  });
+
+  const existing = await tx.taskCompletionRecord.findFirst({
+    where: { subjectName: normalizedName },
+    orderBy: [{ updatedAt: 'desc' }]
+  });
+
+  if (existing) {
+    await tx.taskCompletionRecord.update({
+      where: { id: existing.id },
+      data: { assignedTeacher: volunteer?.teacher ?? null }
+    });
+    return;
+  }
+
+  await tx.taskCompletionRecord.create({
+    data: {
+      subjectName: normalizedName,
+      subjectCode: '',
+      assignedTeacher: volunteer?.teacher ?? null,
+      tasks: {}
+    }
+  });
+}
+
 export async function createAppointment(input: AppointmentInput) {
   return prisma.$transaction(async (tx) => {
     const appointment = await tx.appointment.create({
@@ -99,6 +139,8 @@ export async function createAppointment(input: AppointmentInput) {
         data: { status: VolunteerStatus.APPOINTED }
       });
     }
+
+    await syncAssignedTeacherFromAppointment(tx, appointment.subjectName, appointment.volunteerId);
 
     return appointment;
   });
@@ -136,6 +178,8 @@ export async function updateAppointment(id: number, input: AppointmentUpdateInpu
       });
     }
 
+    await syncAssignedTeacherFromAppointment(tx, appointment.subjectName, appointment.volunteerId);
+
     return appointment;
   });
 }
@@ -147,7 +191,10 @@ export async function deleteAppointment(id: number) {
 const defaultTaskConfigs: AppointmentTaskConfigInput[] = ['磁共振', '脑电', '认知', '访谈'].map((name) => ({
   name,
   sessions: ['Session 1', 'Session 2', 'Session 3', 'Session 4', 'Session 5'],
-  rounds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  rounds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  roundSessions: Object.fromEntries(
+    Array.from({ length: 10 }, (_, index) => [String(index + 1), ['Session 1', 'Session 2', 'Session 3', 'Session 4', 'Session 5']])
+  )
 }));
 
 export async function listAppointmentTaskConfigs() {
@@ -179,6 +226,7 @@ export async function replaceAppointmentTaskConfigs(configs: AppointmentTaskConf
         name: config.name,
         sessions: config.sessions,
         rounds: config.rounds,
+        roundSessions: config.roundSessions,
         sortOrder: index + 1
       }))
     });
@@ -193,6 +241,10 @@ export async function getAppointmentDay(date: string) {
     update: {},
     create: { date, assistants: [] }
   });
+}
+
+export async function listAppointmentDays() {
+  return prisma.appointmentDay.findMany();
 }
 
 export async function updateAppointmentDay(date: string, assistants: string[]) {

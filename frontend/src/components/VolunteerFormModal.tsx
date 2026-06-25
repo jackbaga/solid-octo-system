@@ -17,8 +17,6 @@ interface VolunteerFormValues {
   name: string;
   age?: number | null;
   phone: string;
-  account?: string | null;
-  password?: string | null;
   status?: VolunteerStatus;
   teacher?: Teacher | null;
   remark?: string | null;
@@ -51,8 +49,6 @@ export function VolunteerFormModal({
         name: volunteer.name,
         age: volunteer.age,
         phone: volunteer.phone,
-        account: volunteer.account,
-        password: volunteer.password,
         status: volunteer.status,
         teacher: volunteer.teacher,
         remark: volunteer.remark
@@ -63,8 +59,6 @@ export function VolunteerFormModal({
       name: '',
       age: null,
       phone: '',
-      account: '',
-      password: '',
       status: 'NOT_CALLED',
       teacher: null,
       remark: ''
@@ -133,14 +127,6 @@ export function VolunteerFormModal({
           rules={[{ required: true, message: '请输入电话' }]}
         >
           <Input placeholder="请输入电话" />
-        </Form.Item>
-
-        <Form.Item label="账号" name="account">
-          <Input placeholder="请输入账号" />
-        </Form.Item>
-
-        <Form.Item label="密码" name="password">
-          <Input placeholder="请输入密码" />
         </Form.Item>
 
         <Form.Item

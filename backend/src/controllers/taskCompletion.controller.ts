@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Teacher } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import {
   AppointmentCompletionInput,
@@ -12,6 +13,7 @@ import {
   updateTaskCompletionRecord,
   upsertTaskCompletionRecords
 } from '../services/taskCompletion.service.js';
+import { listAppointmentTaskConfigs } from '../services/appointment.service.js';
 
 function parseId(value: string) {
   const id = Number(value);
@@ -31,6 +33,23 @@ function normalizeDistributionStatus(value: unknown) {
   return isCompletedCell(value) ? '已发放' : '未发放';
 }
 
+function displayDistributionStatus(value: unknown) {
+  return isCompletedCell(value) ? 1 : 0;
+}
+
+function displayCompletionStatus(value: unknown) {
+  return value ? 1 : 0;
+}
+
+function normalizeTeacher(value: unknown) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const text = String(value).trim();
+  return Object.values(Teacher).includes(text as Teacher) ? text as Teacher : undefined;
+}
+
 function fillMergedHeaders(sheet: XLSX.WorkSheet, rows: unknown[][]) {
   const merges = sheet['!merges'] ?? [];
 
@@ -47,6 +66,11 @@ function fillMergedHeaders(sheet: XLSX.WorkSheet, rows: unknown[][]) {
 }
 
 const ignoredTaskGroups = new Set(['', '序号', '其他信息', '被试基本信息', '备注']);
+const roundLabels = ['第一轮', '第二轮', '第三轮', '第四轮', '第五轮', '第六轮', '第七轮', '第八轮', '第九轮', '第十轮'];
+const teacherLabels: Record<Teacher, string> = {
+  WANG_LE: '王乐老师',
+  WEI_SHIYIN: '魏诗荫老师'
+};
 
 function normalizeRoundName(value: string) {
   const chineseRounds = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
@@ -72,6 +96,221 @@ function normalizeRequestedRound(value: unknown) {
   const text = normalizeHeader(value);
   const normalized = normalizeRoundName(text);
   return /^第[一二三四五六七八九十]轮$/.test(normalized) ? normalized : null;
+}
+
+function stripRoundPrefix(value: string) {
+  return normalizeHeader(value).replace(/^第[一二三四五六七八九十]轮-/, '');
+}
+
+function getTaskRoundName(taskName: string) {
+  const match = normalizeHeader(taskName).match(/^(第[一二三四五六七八九十]轮)-/);
+  return match?.[1] ?? null;
+}
+
+function getRoundNumber(roundName: string | null) {
+  const chineseRounds = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+  const match = roundName?.match(/^第([一二三四五六七八九十])轮$/);
+  return match ? chineseRounds.indexOf(match[1]) + 1 : null;
+}
+
+function sortSessions(sessions: string[]) {
+  return sessions
+    .map((sessionName, index) => {
+      const match = sessionName.match(/\d+/);
+      return {
+        sessionName,
+        index,
+        number: match ? Number(match[0]) : Number.POSITIVE_INFINITY
+      };
+    })
+    .sort((a, b) => a.number - b.number || a.index - b.index)
+    .map((item) => item.sessionName);
+}
+
+type AllowedCompletionMap = Map<string, Map<string, Set<string>>>;
+
+async function buildAllowedCompletionMap() {
+  const configs = await listAppointmentTaskConfigs();
+  const allowed: AllowedCompletionMap = new Map();
+
+  for (const config of configs) {
+    const taskBaseName = stripRoundPrefix(config.name);
+    const roundSessions = config.roundSessions && typeof config.roundSessions === 'object' && !Array.isArray(config.roundSessions)
+      ? config.roundSessions as Record<string, unknown>
+      : {};
+
+    for (const round of config.rounds) {
+      const roundName = normalizeRoundName(`第${round}轮`);
+      const sessions = Array.isArray(roundSessions[String(round)])
+        ? (roundSessions[String(round)] as unknown[]).map((session) => normalizeHeader(session)).filter(Boolean)
+        : config.sessions;
+
+      if (sessions.length === 0) {
+        continue;
+      }
+
+      if (!allowed.has(roundName)) {
+        allowed.set(roundName, new Map());
+      }
+
+      allowed.get(roundName)?.set(taskBaseName, new Set(sessions));
+    }
+  }
+
+  return allowed;
+}
+
+function filterTasksBySettings(tasks: CompletionTaskMap, allowed: AllowedCompletionMap) {
+  const nextTasks: CompletionTaskMap = {};
+
+  if (!tasks || typeof tasks !== 'object' || Array.isArray(tasks)) {
+    return nextTasks;
+  }
+
+  for (const [taskName, task] of Object.entries(tasks)) {
+    const roundName = getTaskRoundName(taskName);
+    const taskBaseName = stripRoundPrefix(taskName);
+    const allowedSessions = roundName ? allowed.get(roundName)?.get(taskBaseName) : undefined;
+
+    if (!roundName || !allowedSessions) {
+      continue;
+    }
+
+    const sessions = Object.fromEntries(
+      Object.entries(task.sessions ?? {}).filter(([sessionName]) => allowedSessions.has(sessionName))
+    );
+
+    if (Object.keys(sessions).length === 0) {
+      continue;
+    }
+
+    const sessionValues = Object.values(sessions);
+    nextTasks[`${roundName}-${taskBaseName}`] = {
+      sessions,
+      completed: sessionValues.length > 0 && sessionValues.every(Boolean)
+    };
+  }
+
+  return nextTasks;
+}
+
+function filterRecordsBySettings(records: TaskCompletionRecordInput[], allowed: AllowedCompletionMap) {
+  return records.map((record) => ({
+    ...record,
+    tasks: filterTasksBySettings(record.tasks, allowed)
+  }));
+}
+
+async function buildRoundExportDefinitions() {
+  const configs = await listAppointmentTaskConfigs();
+
+  return roundLabels.map((roundName, roundIndex) => {
+    const round = roundIndex + 1;
+    const tasks = configs.flatMap((config, configIndex) => {
+      const taskBaseName = stripRoundPrefix(config.name);
+      const roundSessions = config.roundSessions && typeof config.roundSessions === 'object' && !Array.isArray(config.roundSessions)
+        ? config.roundSessions as Record<string, unknown>
+        : {};
+      const sessions = Array.isArray(roundSessions[String(round)])
+        ? (roundSessions[String(round)] as unknown[]).map((session) => normalizeHeader(session)).filter(Boolean)
+        : config.sessions.map((session) => normalizeHeader(session)).filter(Boolean);
+
+      if (!config.rounds.includes(round) || sessions.length === 0) {
+        return [];
+      }
+
+      return [{
+        taskName: `${roundName}-${taskBaseName}`,
+        displayName: taskBaseName,
+        sessions: sortSessions(Array.from(new Set(sessions))),
+        sortOrder: configIndex
+      }];
+    }).sort((a, b) => {
+      const aIsParent = a.displayName.includes('家长');
+      const bIsParent = b.displayName.includes('家长');
+
+      if (aIsParent !== bIsParent) {
+        return aIsParent ? 1 : -1;
+      }
+
+      return a.sortOrder - b.sortOrder;
+    });
+
+    return { roundName, tasks };
+  });
+}
+
+function buildRoundWorksheet(roundName: string, tasks: Awaited<ReturnType<typeof buildRoundExportDefinitions>>[number]['tasks'], records: Awaited<ReturnType<typeof listTaskCompletionRecords>>) {
+  const baseHeaders = ['姓名', '编号', '分配老师'];
+  const tailHeaders = ['被试费发放情况', '认知报告发放', '备注'];
+  const firstHeader = [...baseHeaders];
+  const secondHeader = baseHeaders.map(() => '');
+  const merges: XLSX.Range[] = [];
+
+  baseHeaders.forEach((_, index) => {
+    merges.push({ s: { r: 0, c: index }, e: { r: 1, c: index } });
+  });
+
+  let columnIndex = baseHeaders.length;
+
+  for (const task of tasks) {
+    const childHeaders = ['任务', ...task.sessions];
+    firstHeader.push(task.displayName, ...Array.from({ length: childHeaders.length - 1 }, () => ''));
+    secondHeader.push(...childHeaders);
+
+    if (childHeaders.length > 1) {
+      merges.push({ s: { r: 0, c: columnIndex }, e: { r: 0, c: columnIndex + childHeaders.length - 1 } });
+    }
+
+    columnIndex += childHeaders.length;
+  }
+
+  firstHeader.push(...tailHeaders);
+  secondHeader.push(...tailHeaders.map(() => ''));
+  tailHeaders.forEach((_, index) => {
+    const tailColumn = columnIndex + index;
+    merges.push({ s: { r: 0, c: tailColumn }, e: { r: 1, c: tailColumn } });
+  });
+
+  const rows = records
+    .filter((record) => tasks.some((task) => Boolean((record.tasks as CompletionTaskMap)?.[task.taskName])))
+    .map((record) => {
+      const tasksMap = record.tasks as CompletionTaskMap;
+      const row: unknown[] = [
+        record.subjectName,
+        record.subjectCode,
+        record.assignedTeacher ? teacherLabels[record.assignedTeacher] : ''
+      ];
+
+      for (const task of tasks) {
+        const recordTask = tasksMap?.[task.taskName];
+        row.push(displayCompletionStatus(recordTask?.completed));
+        for (const session of task.sessions) {
+          row.push(displayCompletionStatus(recordTask?.sessions?.[session]));
+        }
+      }
+
+      row.push(
+        displayDistributionStatus(record.paymentStatus),
+        displayDistributionStatus(record.cognitiveReportStatus),
+        record.remark ?? ''
+      );
+
+      return row;
+    });
+
+  const worksheet = XLSX.utils.aoa_to_sheet([firstHeader, secondHeader, ...rows]);
+  worksheet['!merges'] = merges;
+  worksheet['!cols'] = [
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    ...tasks.flatMap((task) => [{ wch: 10 }, ...task.sessions.map(() => ({ wch: 14 }))]),
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 24 }
+  ];
+  return worksheet;
 }
 
 function findHeaderRow(rows: unknown[][]) {
@@ -385,7 +624,12 @@ function parseLegacyCompletionWorkbook(buffer: Buffer) {
 
 export async function getTaskCompletionRecords(_req: Request, res: Response) {
   const records = await listTaskCompletionRecords();
-  return res.json(records);
+  const allowed = await buildAllowedCompletionMap();
+  const filteredRecords = records.map((record) => ({
+    ...record,
+    tasks: filterTasksBySettings(record.tasks as CompletionTaskMap, allowed)
+  }));
+  return res.json(filteredRecords);
 }
 
 export async function removeTaskCompletionRecord(req: Request, res: Response) {
@@ -411,6 +655,12 @@ export async function patchTaskCompletionRecord(req: Request, res: Response) {
   }
 
   const record = await updateTaskCompletionRecord(id, {
+    ...('parentAccount' in req.body ? { parentAccount: req.body.parentAccount ? String(req.body.parentAccount).trim() : null } : {}),
+    ...('parentPassword' in req.body ? { parentPassword: req.body.parentPassword ? String(req.body.parentPassword).trim() : null } : {}),
+    ...('parentPhone' in req.body ? { parentPhone: req.body.parentPhone ? String(req.body.parentPhone).trim() : null } : {}),
+    ...('personalAccount' in req.body ? { personalAccount: req.body.personalAccount ? String(req.body.personalAccount).trim() : null } : {}),
+    ...('personalPassword' in req.body ? { personalPassword: req.body.personalPassword ? String(req.body.personalPassword).trim() : null } : {}),
+    ...('assignedTeacher' in req.body ? { assignedTeacher: normalizeTeacher(req.body.assignedTeacher) ?? null } : {}),
     ...('paymentStatus' in req.body ? { paymentStatus: req.body.paymentStatus ? String(req.body.paymentStatus).trim() : null } : {}),
     ...('cognitiveReportStatus' in req.body ? { cognitiveReportStatus: req.body.cognitiveReportStatus ? String(req.body.cognitiveReportStatus).trim() : null } : {}),
     ...('remark' in req.body ? { remark: req.body.remark ? String(req.body.remark).trim() : null } : {}),
@@ -475,7 +725,9 @@ export async function importTaskCompletionRecords(req: Request, res: Response) {
     return res.status(400).json({ message: '任务完成度导入失败。', errors });
   }
 
-  const result = await upsertTaskCompletionRecords(records);
+  const allowed = await buildAllowedCompletionMap();
+  const filteredRecords = filterRecordsBySettings(records, allowed);
+  const result = await upsertTaskCompletionRecords(filteredRecords);
   return res.json({ message: '任务完成度导入完成。', ...result });
 }
 
@@ -492,4 +744,29 @@ export async function syncTaskCompletionFromAppointments(req: Request, res: Resp
   const result = await syncAppointmentCompletions(normalizedItems);
   const records = await listTaskCompletionRecords();
   return res.json({ message: '任务完成状态已同步。', ...result, records });
+}
+
+export async function exportTaskCompletionRecords(_req: Request, res: Response) {
+  const records = await listTaskCompletionRecords();
+  const allowed = await buildAllowedCompletionMap();
+  const filteredRecords = records.map((record) => ({
+    ...record,
+    tasks: filterTasksBySettings(record.tasks as CompletionTaskMap, allowed)
+  }));
+  const roundDefinitions = await buildRoundExportDefinitions();
+  const workbook = XLSX.utils.book_new();
+
+  for (const definition of roundDefinitions) {
+    const worksheet = buildRoundWorksheet(definition.roundName, definition.tasks, filteredRecords);
+    XLSX.utils.book_append_sheet(workbook, worksheet, definition.roundName);
+  }
+
+  const buffer = XLSX.write(workbook, {
+    type: 'buffer',
+    bookType: 'xlsx'
+  });
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent('任务完成度.xlsx')}"`);
+  return res.send(buffer);
 }

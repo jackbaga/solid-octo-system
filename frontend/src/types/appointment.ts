@@ -53,6 +53,7 @@ export interface AppointmentTaskConfig {
   name: string;
   sessions: string[];
   rounds: number[];
+  roundSessions: Record<string, string[]>;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -62,4 +63,5 @@ export interface AppointmentTaskConfigPayload {
   name: string;
   sessions: string[];
   rounds: number[];
+  roundSessions: Record<string, string[]>;
 }

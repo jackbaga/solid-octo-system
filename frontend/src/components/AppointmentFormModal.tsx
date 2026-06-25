@@ -11,6 +11,7 @@ import {
   AppointmentPayload,
   AppointmentTaskConfig
 } from '../types/appointment';
+import { TaskCompletionRecord } from '../types/taskCompletion';
 import { Teacher, Volunteer } from '../types/volunteer';
 import { teacherLabels } from '../constants/volunteer';
 
@@ -23,6 +24,7 @@ interface AppointmentFormModalProps {
   appointment?: Appointment | null;
   taskConfigs: AppointmentTaskConfig[];
   volunteers: Volunteer[];
+  taskCompletionRecords: TaskCompletionRecord[];
   confirmLoading?: boolean;
   onCancel: () => void;
   onSubmit: (payload: AppointmentPayload) => Promise<void>;
@@ -35,6 +37,13 @@ function getTeacherName(teacher?: Teacher | null) {
   return teacher ? teacherLabels[teacher] : '未分配老师';
 }
 
+function splitSessionValue(value?: string | null) {
+  return String(value ?? '')
+    .split(/[、,，]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export function AppointmentFormModal({
   open,
   time,
@@ -42,30 +51,64 @@ export function AppointmentFormModal({
   appointment,
   taskConfigs,
   volunteers,
+  taskCompletionRecords,
   confirmLoading,
   onCancel,
   onSubmit
 }: AppointmentFormModalProps) {
   const [step, setStep] = useState<WizardStep>('project');
   const [projectName, setProjectName] = useState('');
-  const [session, setSession] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<string[]>([]);
   const [round, setRound] = useState<string | null>(null);
-  const [volunteerId, setVolunteerId] = useState<number | null>(null);
+  const [subjectKey, setSubjectKey] = useState<string | null>(null);
   const [remark, setRemark] = useState('');
 
-  const selectedVolunteer = useMemo(
-    () => volunteers.find((volunteer) => volunteer.id === volunteerId) ?? null,
-    [volunteerId, volunteers]
+  const subjectOptions = useMemo(() => {
+    const taskSubjects = taskCompletionRecords
+      .filter((record) => record.subjectName)
+      .map((record) => ({
+        key: `task-${record.id}`,
+        name: record.subjectName,
+        label: `${record.subjectName}（任务完成度${record.assignedTeacher ? `，${teacherLabels[record.assignedTeacher]}` : ''}）`,
+        volunteerId: null as number | null,
+        source: 'task' as const
+      }));
+    const taskSubjectNames = new Set(taskSubjects.map((subject) => subject.name));
+    const volunteerSubjects = volunteers
+      .filter((volunteer) => !taskSubjectNames.has(volunteer.name))
+      .map((volunteer) => ({
+        key: `volunteer-${volunteer.id}`,
+        name: volunteer.name,
+        label: `${volunteer.name}（${getTeacherName(volunteer.teacher)}）`,
+        volunteerId: volunteer.id,
+        source: 'volunteer' as const
+      }));
+
+    return [...taskSubjects, ...volunteerSubjects];
+  }, [taskCompletionRecords, volunteers]);
+  const selectedSubject = useMemo(
+    () => subjectOptions.find((subject) => subject.key === subjectKey) ?? null,
+    [subjectKey, subjectOptions]
   );
   const selectedTaskConfig = useMemo(
     () => taskConfigs.find((config) => config.name === projectName) ?? null,
     [projectName, taskConfigs]
   );
-  const sessionSelectOptions = (selectedTaskConfig?.sessions ?? []).map((value) => ({ value, label: value }));
+  const projectConfigs = useMemo(
+    () => Array.from(new Map(taskConfigs.filter((config) => config.rounds.length > 0).map((config) => [config.name, config])).values()),
+    [taskConfigs]
+  );
   const roundSelectOptions = (selectedTaskConfig?.rounds ?? []).map((value) => {
     const label = `第${chineseRoundNumbers[value - 1] ?? value}轮`;
     return { value: label, label };
   });
+  const selectedRoundNumber = roundSelectOptions.find((option) => option.value === round)
+    ? (chineseRoundNumbers.findIndex((item) => `第${item}轮` === round) + 1)
+    : null;
+  const selectedRoundSessions = selectedRoundNumber && selectedTaskConfig?.roundSessions
+    ? selectedTaskConfig.roundSessions[String(selectedRoundNumber)] ?? []
+    : selectedTaskConfig?.sessions ?? [];
+  const sessionSelectOptions = selectedRoundSessions.map((value) => ({ value, label: value }));
 
   useEffect(() => {
     if (!open) {
@@ -75,30 +118,33 @@ export function AppointmentFormModal({
     if (appointment) {
       setStep('subject');
       setProjectName(appointment.projectName || '');
-      setSession(appointment.session ?? null);
+      setSessions(splitSessionValue(appointment.session));
       setRound(appointment.round ?? null);
-      setVolunteerId(appointment.volunteerId);
+      const subject = appointment.volunteerId
+        ? subjectOptions.find((option) => option.key === `volunteer-${appointment.volunteerId}`)
+        : subjectOptions.find((option) => option.name === appointment.subjectName);
+      setSubjectKey(subject?.key ?? null);
       setRemark(appointment.remark ?? '');
       return;
     }
 
     setStep('project');
     setProjectName('');
-    setSession(null);
+    setSessions([]);
     setRound(null);
-    setVolunteerId(null);
+    setSubjectKey(null);
     setRemark('');
-  }, [appointment, open]);
+  }, [appointment, open, subjectOptions]);
 
   async function handleFinalSubmit() {
     await onSubmit({
-      volunteerId: selectedVolunteer?.id ?? null,
-      subjectName: selectedVolunteer?.name ?? '',
+      volunteerId: selectedSubject?.volunteerId ?? null,
+      subjectName: selectedSubject?.name ?? '',
       date,
       time,
       projectType: 'OTHER',
       projectName,
-      session,
+      session: sessions.length > 0 ? sessions.join('、') : null,
       round,
       remark: remark.trim() || null,
       status: 'BOOKED'
@@ -158,13 +204,13 @@ export function AppointmentFormModal({
         <div className="wizard-body">
           {step === 'project' ? (
             <div className="wizard-project-grid">
-              {taskConfigs.map((config, index) => (
+              {projectConfigs.map((config, index) => (
                 <Button
                   key={config.id}
                   className={`wizard-project-button ${projectButtonClasses[index % projectButtonClasses.length]}`}
                   onClick={() => {
                     setProjectName(config.name);
-                    setSession(null);
+                    setSessions([]);
                     setRound(null);
                     setStep('session');
                   }}
@@ -178,22 +224,25 @@ export function AppointmentFormModal({
           {step === 'session' ? (
             <>
               <Select
-                value={session}
-                options={sessionSelectOptions}
-                onChange={setSession}
-                allowClear
-                placeholder="选择 Session（可选）"
-                className="wizard-session-select"
-                suffixIcon={<span>&lt;</span>}
-              />
-              <Select
                 value={round}
                 options={roundSelectOptions}
-                onChange={setRound}
+                onChange={(value) => {
+                  setRound(value);
+                  setSessions([]);
+                }}
                 allowClear
                 placeholder="选择轮数（可选）"
                 className="wizard-session-select wizard-round-select"
                 suffixIcon={<span>&lt;</span>}
+              />
+              <Select
+                mode="multiple"
+                value={sessions}
+                options={sessionSelectOptions}
+                onChange={setSessions}
+                allowClear
+                placeholder="选择 Session（可多选）"
+                className="wizard-session-select"
               />
               <Button
                 className="wizard-confirm-button"
@@ -209,16 +258,16 @@ export function AppointmentFormModal({
             <div className="wizard-subject-layout">
               <div className="wizard-subject-picker">
                 <Select
-                  value={volunteerId}
+                  value={subjectKey}
                   showSearch
                   placeholder="请选择被试"
                   allowClear
                   optionFilterProp="label"
-                  onChange={setVolunteerId}
+                  onChange={setSubjectKey}
                   className="wizard-subject-select"
-                  options={volunteers.map((volunteer) => ({
-                    value: volunteer.id,
-                    label: `${volunteer.name}（${getTeacherName(volunteer.teacher)}）`
+                  options={subjectOptions.map((subject) => ({
+                    value: subject.key,
+                    label: subject.label
                   }))}
                 />
               </div>

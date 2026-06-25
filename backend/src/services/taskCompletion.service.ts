@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, Teacher } from '@prisma/client';
 import { prisma } from '../prisma/client.js';
 
 export interface CompletionTaskMap {
@@ -26,6 +26,12 @@ export interface AppointmentCompletionInput {
 }
 
 export interface UpdateTaskCompletionRecordInput {
+  parentAccount?: string | null;
+  parentPassword?: string | null;
+  parentPhone?: string | null;
+  personalAccount?: string | null;
+  personalPassword?: string | null;
+  assignedTeacher?: Teacher | null;
   paymentStatus?: string | null;
   cognitiveReportStatus?: string | null;
   remark?: string | null;
@@ -117,10 +123,45 @@ export async function updateTaskCompletionRecord(id: number, input: UpdateTaskCo
   return prisma.taskCompletionRecord.update({
     where: { id },
     data: {
+      ...('parentAccount' in input ? { parentAccount: input.parentAccount ?? null } : {}),
+      ...('parentPassword' in input ? { parentPassword: input.parentPassword ?? null } : {}),
+      ...('parentPhone' in input ? { parentPhone: input.parentPhone ?? null } : {}),
+      ...('personalAccount' in input ? { personalAccount: input.personalAccount ?? null } : {}),
+      ...('personalPassword' in input ? { personalPassword: input.personalPassword ?? null } : {}),
+      ...('assignedTeacher' in input ? { assignedTeacher: input.assignedTeacher ?? null } : {}),
       ...('paymentStatus' in input ? { paymentStatus: input.paymentStatus ?? null } : {}),
       ...('cognitiveReportStatus' in input ? { cognitiveReportStatus: input.cognitiveReportStatus ?? null } : {}),
       ...('remark' in input ? { remark: input.remark ?? null } : {}),
       ...('tasks' in input && input.tasks ? { tasks: normalizeTasks(input.tasks) } : {})
+    }
+  });
+}
+
+export async function syncTaskCompletionTeacher(subjectName: string, assignedTeacher?: Teacher | null) {
+  const normalizedName = subjectName.trim();
+
+  if (!normalizedName) {
+    return null;
+  }
+
+  const existing = await prisma.taskCompletionRecord.findFirst({
+    where: { subjectName: normalizedName },
+    orderBy: [{ updatedAt: 'desc' }]
+  });
+
+  if (existing) {
+    return prisma.taskCompletionRecord.update({
+      where: { id: existing.id },
+      data: { assignedTeacher: assignedTeacher ?? null }
+    });
+  }
+
+  return prisma.taskCompletionRecord.create({
+    data: {
+      subjectName: normalizedName,
+      subjectCode: '',
+      assignedTeacher: assignedTeacher ?? null,
+      tasks: {}
     }
   });
 }
@@ -232,14 +273,19 @@ export async function syncAppointmentCompletions(items: AppointmentCompletionInp
       }
 
       const subjectCode = normalizeCode(item.subjectCode);
-      const existing = await tx.taskCompletionRecord.findUnique({
-        where: {
-          subjectName_subjectCode: {
-            subjectName,
-            subjectCode
-          }
-        }
-      });
+      const existing = subjectCode
+        ? await tx.taskCompletionRecord.findUnique({
+            where: {
+              subjectName_subjectCode: {
+                subjectName,
+                subjectCode
+              }
+            }
+          })
+        : await tx.taskCompletionRecord.findFirst({
+            where: { subjectName },
+            orderBy: [{ updatedAt: 'desc' }]
+          });
       const tasks = asTaskMap(existing?.tasks);
       const task = tasks[taskName] ?? { sessions: {}, completed: false };
       const sessions = { ...task.sessions, [session]: item.completed };

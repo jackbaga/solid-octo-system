@@ -3,6 +3,7 @@ import {
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
+  LogoutOutlined,
   PlusOutlined,
   TableOutlined,
   UploadOutlined
@@ -84,6 +85,12 @@ export function CallManagementPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingVolunteer, setEditingVolunteer] = useState<Volunteer | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
+
+  function handleLogout() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('authUser');
+    window.dispatchEvent(new Event('auth:logout'));
+  }
 
   async function loadSheets(nextSelectedSheetId = selectedSheetId) {
     try {
@@ -346,7 +353,7 @@ export function CallManagementPage() {
         <Space>
           <Button icon={<ArrowLeftOutlined />} href="#/" />
           <Typography.Title level={3} className="app-title">
-            CCBD-北大
+            致电管理
           </Typography.Title>
         </Space>
         <Space wrap>
@@ -365,6 +372,9 @@ export function CallManagementPage() {
           </Upload>
           <Button icon={<DownloadOutlined />} onClick={handleExport}>
             导出表格
+          </Button>
+          <Button icon={<LogoutOutlined />} onClick={handleLogout}>
+            退出登录
           </Button>
         </Space>
       </Header>

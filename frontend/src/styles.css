@@ -4,7 +4,7 @@
 
 body {
   margin: 0;
-  background: #f4f6f8;
+  background: #f4f7fb;
   color: #1f2933;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -15,11 +15,11 @@ body {
 
 .home-shell {
   min-height: 100vh;
-  background: #eef3f8;
+  background: #f4f7fb;
 }
 
 .home-content {
-  min-height: 100vh;
+  min-height: calc(100vh - 72px);
   padding: 48px 24px;
   display: flex;
   flex-direction: column;
@@ -58,12 +58,48 @@ body {
   font-weight: 600;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #eef5ff 0%, #f7fafc 55%, #eef6f2 100%);
+}
+
+.auth-content {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card.ant-card {
+  width: min(420px, 100%);
+  border: 1px solid #dbe5f2;
+  border-radius: 10px;
+  box-shadow: 0 20px 50px rgba(31, 41, 55, 0.08);
+}
+
+.auth-title.ant-typography {
+  margin-bottom: 4px;
+  color: #152238;
+}
+
+.auth-subtitle.ant-typography {
+  display: block;
+  margin-bottom: 18px;
+  color: #64748b;
+}
+
+.auth-switch.ant-segmented {
+  margin-bottom: 20px;
+}
+
 .app-header {
   height: auto;
   min-height: 72px;
   padding: 16px 24px;
   background: #ffffff;
-  border-bottom: 1px solid #dde3ea;
+  border-bottom: 1px solid #dbe5f2;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -362,6 +398,18 @@ body {
   display: grid;
   grid-template-columns: repeat(5, minmax(80px, 1fr));
   gap: 8px;
+}
+
+.task-settings-toolbar {
+  align-items: center;
+}
+
+.task-settings-round-select {
+  min-width: 140px;
+}
+
+.subject-info-section-title.ant-typography {
+  margin-top: 22px;
 }
 
 .summary-check-row {

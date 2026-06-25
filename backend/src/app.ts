@@ -3,8 +3,10 @@ import express from 'express';
 import multer from 'multer';
 import { Prisma } from '@prisma/client';
 import { appointmentRouter } from './routes/appointment.routes.js';
+import { authRouter } from './routes/auth.routes.js';
 import { taskCompletionRouter } from './routes/taskCompletion.routes.js';
 import { volunteerRouter } from './routes/volunteer.routes.js';
+import { requireAuth } from './middleware/auth.middleware.js';
 
 export const app = express();
 
@@ -15,6 +17,8 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: '正常' });
 });
 
+app.use('/api/auth', authRouter);
+app.use('/api', requireAuth);
 app.use('/api/volunteers', volunteerRouter);
 app.use('/api/appointments', appointmentRouter);
 app.use('/api/task-completion', taskCompletionRouter);
@@ -30,7 +34,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === 'P2002') {
-      return res.status(400).json({ message: '同名表格或同一表格中的志愿者信息已存在。' });
+      return res.status(400).json({ message: '账号、表格或志愿者信息已存在。' });
     }
 
     if (err.code === 'P2003') {

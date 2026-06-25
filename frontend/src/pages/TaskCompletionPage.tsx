@@ -1,6 +1,6 @@
-import { ArrowLeftOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, LogoutOutlined, SettingOutlined, UploadOutlined } from '@ant-design/icons';
 import axios from 'axios';
-import { Button, Input, Layout, message, Popconfirm, Select, Space, Table, Tag, Typography, Upload } from 'antd';
+import { Button, Form, Input, Layout, message, Modal, Popconfirm, Select, Space, Table, Tag, Typography, Upload } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadProps } from 'antd';
 import type { Key } from 'react';
@@ -8,12 +8,21 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   clearTaskCompletionRecords,
   deleteTaskCompletionRecord,
+  exportTaskCompletionRecords,
   fetchTaskCompletionRecords,
   importTaskCompletion,
   promoteTaskCompletionRecord,
   updateTaskCompletionRecord
 } from '../services/taskCompletionApi';
+import {
+  fetchAppointmentTaskConfigs,
+  saveAppointmentTaskConfigs
+} from '../services/appointmentApi';
+import { teacherLabels, teacherOptions } from '../constants/volunteer';
+import { TaskSettingsModal } from '../components/TaskSettingsModal';
+import { AppointmentTaskConfig, AppointmentTaskConfigPayload } from '../types/appointment';
 import { CompletionTaskMap, TaskCompletionRecord } from '../types/taskCompletion';
+import { Teacher } from '../types/volunteer';
 
 const { Header, Content } = Layout;
 const roundLabels = ['第一轮', '第二轮', '第三轮', '第四轮', '第五轮', '第六轮', '第七轮', '第八轮', '第九轮', '第十轮'];
@@ -34,6 +43,10 @@ function normalizeTaskDisplayName(taskName: string) {
   }
 
   return taskName;
+}
+
+function stripRoundPrefix(taskName: string) {
+  return normalizeTaskDisplayName(taskName).replace(/^第[一二三四五六七八九十]轮-/, '');
 }
 
 function getTaskRoundName(taskName: string) {
@@ -88,6 +101,17 @@ function getErrorMessage(error: unknown) {
   return '操作失败，请稍后重试';
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function TaskCompletionPage() {
   const [records, setRecords] = useState<TaskCompletionRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -96,7 +120,27 @@ export function TaskCompletionPage() {
   const [roundFilter, setRoundFilter] = useState('ALL');
   const [importRound, setImportRound] = useState('第一轮');
   const [nameSearch, setNameSearch] = useState('');
+  const [taskConfigs, setTaskConfigs] = useState<AppointmentTaskConfig[]>([]);
+  const [taskSettingsOpen, setTaskSettingsOpen] = useState(false);
+  const [taskSettingsLoading, setTaskSettingsLoading] = useState(false);
+  const [personalInfoOpen, setPersonalInfoOpen] = useState(false);
+  const [personalInfoLoading, setPersonalInfoLoading] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<TaskCompletionRecord | null>(null);
+  const [personalInfoForm] = Form.useForm<{
+    parentAccount?: string;
+    parentPassword?: string;
+    parentPhone?: string;
+    personalAccount?: string;
+    personalPassword?: string;
+    assignedTeacher?: Teacher | null;
+  }>();
   const [messageApi, contextHolder] = message.useMessage();
+
+  function handleLogout() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('authUser');
+    window.dispatchEvent(new Event('auth:logout'));
+  }
 
   function normalizeTasks(tasks: CompletionTaskMap) {
     return Object.fromEntries(
@@ -123,6 +167,12 @@ export function TaskCompletionPage() {
   async function saveRecordPatch(
     id: number,
     payload: {
+      parentAccount?: string | null;
+      parentPassword?: string | null;
+      parentPhone?: string | null;
+      personalAccount?: string | null;
+      personalPassword?: string | null;
+      assignedTeacher?: Teacher | null;
       paymentStatus?: string | null;
       cognitiveReportStatus?: string | null;
       remark?: string | null;
@@ -185,6 +235,46 @@ export function TaskCompletionPage() {
     saveRecordPatch(record.id, { [field]: nextValue });
   }
 
+  function openPersonalInfoModal(record: TaskCompletionRecord) {
+    setEditingRecord(record);
+    personalInfoForm.setFieldsValue({
+      parentAccount: record.parentAccount ?? '',
+      parentPassword: record.parentPassword ?? '',
+      parentPhone: record.parentPhone ?? '',
+      personalAccount: record.personalAccount ?? '',
+      personalPassword: record.personalPassword ?? '',
+      assignedTeacher: record.assignedTeacher ?? null
+    });
+    setPersonalInfoOpen(true);
+  }
+
+  async function handleSavePersonalInfo() {
+    if (!editingRecord) {
+      return;
+    }
+
+    const values = await personalInfoForm.validateFields();
+    setPersonalInfoLoading(true);
+    try {
+      const nextRecord = await updateTaskCompletionRecord(editingRecord.id, {
+        parentAccount: values.parentAccount?.trim() || null,
+        parentPassword: values.parentPassword?.trim() || null,
+        parentPhone: values.parentPhone?.trim() || null,
+        personalAccount: values.personalAccount?.trim() || null,
+        personalPassword: values.personalPassword?.trim() || null,
+        assignedTeacher: values.assignedTeacher ?? null
+      });
+      updateRecordLocally(nextRecord);
+      setPersonalInfoOpen(false);
+      setEditingRecord(null);
+      messageApi.success('被试者个人信息已保存');
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setPersonalInfoLoading(false);
+    }
+  }
+
   function canPromoteRecord(record: TaskCompletionRecord) {
     if (roundFilter === 'ALL' || !getNextRoundName(roundFilter)) {
       return false;
@@ -225,28 +315,62 @@ export function TaskCompletionPage() {
     }
   }
 
+  async function loadTaskConfigs() {
+    const configs = await fetchAppointmentTaskConfigs();
+    setTaskConfigs(configs);
+    return configs;
+  }
+
   useEffect(() => {
     loadRecords();
+    loadTaskConfigs().catch((error) => messageApi.error(getErrorMessage(error)));
   }, []);
 
-  const taskColumns = useMemo(() => {
-    const taskMap = new Map<string, Set<string>>();
+  async function openTaskSettings() {
+    try {
+      const configs = await loadTaskConfigs();
+      setTaskConfigs(configs);
+      setTaskSettingsOpen(true);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
+  }
 
-    for (const record of records) {
-      Object.entries(record.tasks ?? {}).forEach(([taskName, task]) => {
-        if (!taskMap.has(taskName)) {
-          taskMap.set(taskName, new Set());
+  async function handleSaveTaskSettings(configs: AppointmentTaskConfigPayload[]) {
+    setTaskSettingsLoading(true);
+    try {
+      const savedConfigs = await saveAppointmentTaskConfigs(configs);
+      setTaskConfigs(savedConfigs);
+      setTaskSettingsOpen(false);
+      messageApi.success('任务设置已保存');
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setTaskSettingsLoading(false);
+    }
+  }
+
+  const taskColumns = useMemo(() => {
+    const configuredTasks = taskConfigs.flatMap((config, configIndex) => {
+      const taskBaseName = stripRoundPrefix(config.name);
+      return config.rounds.flatMap((round) => {
+        const roundName = roundLabels[round - 1];
+        const sessions = config.roundSessions?.[String(round)] ?? config.sessions;
+
+        if (!roundName || sessions.length === 0) {
+          return [];
         }
 
-        Object.keys(task.sessions ?? {}).forEach((sessionName) => {
-          taskMap.get(taskName)?.add(sessionName);
-        });
+        return [{
+          taskName: `${roundName}-${taskBaseName}`,
+          sessions: new Set(sessions),
+          index: configIndex * 10 + round
+        }];
       });
-    }
+    });
 
-    return Array.from(taskMap.entries())
-      .filter(([taskName]) => roundFilter === 'ALL' || getTaskRoundName(taskName) === roundFilter)
-      .map(([taskName, sessions], index) => ({ taskName, sessions, index }))
+    return configuredTasks
+      .filter(({ taskName }) => roundFilter === 'ALL' || getTaskRoundName(taskName) === roundFilter)
       .sort((a, b) => {
         if (isParentTask(a.taskName) !== isParentTask(b.taskName)) {
           return isParentTask(a.taskName) ? 1 : -1;
@@ -300,19 +424,27 @@ export function TaskCompletionPage() {
           }))
         ]
       }));
-  }, [records, roundFilter]);
+  }, [roundFilter, taskConfigs]);
 
   const filteredRecords = useMemo(() => {
     const keyword = nameSearch.trim().toLowerCase();
+    const visibleTaskNames = new Set(
+      taskConfigs.flatMap((config) => {
+        const taskBaseName = stripRoundPrefix(config.name);
+        return config.rounds.map((round) => `${roundLabels[round - 1]}-${taskBaseName}`);
+      })
+    );
 
     return records.filter((record) => {
       const matchesRound = roundFilter === 'ALL' ||
-        Object.keys(record.tasks ?? {}).some((taskName) => getTaskRoundName(taskName) === roundFilter);
+        Object.keys(record.tasks ?? {}).some((taskName) => (
+          getTaskRoundName(taskName) === roundFilter && visibleTaskNames.has(normalizeTaskDisplayName(taskName))
+        ));
       const matchesName = !keyword || record.subjectName.toLowerCase().includes(keyword);
 
       return matchesRound && matchesName;
     });
-  }, [nameSearch, records, roundFilter]);
+  }, [nameSearch, records, roundFilter, taskConfigs]);
 
   const roundOptions = useMemo(() => {
     return [
@@ -335,6 +467,13 @@ export function TaskCompletionPage() {
       key: 'subjectCode',
       width: 120,
       render: (value: string) => value || '-'
+    },
+    {
+      title: '分配老师',
+      dataIndex: 'assignedTeacher',
+      key: 'assignedTeacher',
+      width: 120,
+      render: (value: Teacher | null) => value ? teacherLabels[value] : '-'
     },
     ...taskColumns,
     {
@@ -440,15 +579,28 @@ export function TaskCompletionPage() {
     }
   }
 
+  async function handleExportRecords() {
+    try {
+      const blob = await exportTaskCompletionRecords();
+      downloadBlob(blob, '任务完成度.xlsx');
+      messageApi.success('任务完成度表格已导出');
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
+  }
+
   const columnsWithActions: ColumnsType<TaskCompletionRecord> = [
     ...columns,
     {
       title: '操作',
       key: 'actions',
       fixed: 'right',
-      width: 90,
+      width: 160,
       render: (_, record) => (
         <Space>
+          <Button size="small" icon={<EditOutlined />} onClick={() => openPersonalInfoModal(record)}>
+            编辑
+          </Button>
           {canPromoteRecord(record) ? (
             <Popconfirm
               title={`确认让 ${record.subjectName} 进入${getNextRoundName(roundFilter)}？`}
@@ -485,6 +637,9 @@ export function TaskCompletionPage() {
           </Typography.Title>
         </Space>
         <Space wrap>
+          <Button icon={<SettingOutlined />} onClick={openTaskSettings}>
+            设置
+          </Button>
           <Select
             value={importRound}
             options={roundLabels.map((round) => ({ value: round, label: `导入到${round}` }))}
@@ -501,6 +656,9 @@ export function TaskCompletionPage() {
               上传完成度表格
             </Button>
           </Upload>
+          <Button icon={<DownloadOutlined />} onClick={handleExportRecords}>
+            导出 Excel
+          </Button>
           <Popconfirm
             title="确认清除全部任务完成度记录？"
             okText="清除"
@@ -511,6 +669,9 @@ export function TaskCompletionPage() {
               一键清除
             </Button>
           </Popconfirm>
+          <Button icon={<LogoutOutlined />} onClick={handleLogout}>
+            退出登录
+          </Button>
         </Space>
       </Header>
       <Content className="app-content">
@@ -560,6 +721,48 @@ export function TaskCompletionPage() {
           scroll={{ x: 900 + taskColumns.length * 240 }}
         />
       </Content>
+
+      <TaskSettingsModal
+        open={taskSettingsOpen}
+        configs={taskConfigs}
+        confirmLoading={taskSettingsLoading}
+        onCancel={() => setTaskSettingsOpen(false)}
+        onSave={handleSaveTaskSettings}
+      />
+
+      <Modal
+        title={editingRecord ? `${editingRecord.subjectName} 的个人信息` : '被试者个人信息'}
+        open={personalInfoOpen}
+        confirmLoading={personalInfoLoading}
+        onCancel={() => {
+          setPersonalInfoOpen(false);
+          setEditingRecord(null);
+        }}
+        onOk={handleSavePersonalInfo}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form form={personalInfoForm} layout="vertical">
+          <Form.Item label="家长账号" name="parentAccount">
+            <Input placeholder="请输入家长账号" />
+          </Form.Item>
+          <Form.Item label="家长密码" name="parentPassword">
+            <Input placeholder="请输入家长密码" />
+          </Form.Item>
+          <Form.Item label="家长电话" name="parentPhone">
+            <Input placeholder="请输入家长电话" />
+          </Form.Item>
+          <Form.Item label="个人账号" name="personalAccount">
+            <Input placeholder="请输入个人账号" />
+          </Form.Item>
+          <Form.Item label="个人密码" name="personalPassword">
+            <Input placeholder="请输入个人密码" />
+          </Form.Item>
+          <Form.Item label="分配老师" name="assignedTeacher">
+            <Select allowClear placeholder="请选择分配老师" options={teacherOptions} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Layout>
   );
 }

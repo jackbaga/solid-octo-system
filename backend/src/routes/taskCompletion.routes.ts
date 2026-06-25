@@ -2,6 +2,7 @@ import { NextFunction, Request, RequestHandler, Response, Router } from 'express
 import multer from 'multer';
 import {
   clearTaskCompletionRecordsController,
+  exportTaskCompletionRecords,
   getTaskCompletionRecords,
   importTaskCompletionRecords,
   patchTaskCompletionRecord,
@@ -33,6 +34,7 @@ const upload = multer({
 });
 
 taskCompletionRouter.get('/records', asyncHandler(getTaskCompletionRecords));
+taskCompletionRouter.get('/export', asyncHandler(exportTaskCompletionRecords));
 taskCompletionRouter.delete('/records', asyncHandler(clearTaskCompletionRecordsController));
 taskCompletionRouter.patch('/records/:id', asyncHandler(patchTaskCompletionRecord));
 taskCompletionRouter.post('/records/:id/promote', asyncHandler(promoteTaskCompletionRecordController));

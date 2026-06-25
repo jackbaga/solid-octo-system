@@ -1,12 +1,16 @@
-import axios from 'axios';
 import { AppointmentCompletionPayloadItem, CompletionTaskMap, TaskCompletionRecord } from '../types/taskCompletion';
-
-const api = axios.create({
-  baseURL: '/api'
-});
+import { Teacher } from '../types/volunteer';
+import { api } from './api';
 
 export async function fetchTaskCompletionRecords() {
   const response = await api.get<TaskCompletionRecord[]>('/task-completion/records');
+  return response.data;
+}
+
+export async function exportTaskCompletionRecords() {
+  const response = await api.get<Blob>('/task-completion/export', {
+    responseType: 'blob'
+  });
   return response.data;
 }
 
@@ -44,6 +48,12 @@ export async function clearTaskCompletionRecords() {
 export async function updateTaskCompletionRecord(
   id: number,
   payload: {
+    parentAccount?: string | null;
+    parentPassword?: string | null;
+    parentPhone?: string | null;
+    personalAccount?: string | null;
+    personalPassword?: string | null;
+    assignedTeacher?: Teacher | null;
     paymentStatus?: string | null;
     cognitiveReportStatus?: string | null;
     remark?: string | null;

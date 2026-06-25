@@ -1,4 +1,3 @@
-import axios from 'axios';
 import {
   CreateVolunteerPayload,
   UpdateVolunteerPayload,
@@ -6,10 +5,7 @@ import {
   VolunteerSheet,
   VolunteerStatus
 } from '../types/volunteer';
-
-const api = axios.create({
-  baseURL: '/api'
-});
+import { api } from './api';
 
 export async function fetchVolunteers(status?: VolunteerStatus | 'ALL', sheetId?: number) {
   const response = await api.get<Volunteer[]>('/volunteers', {

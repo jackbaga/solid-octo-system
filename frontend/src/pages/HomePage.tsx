@@ -1,15 +1,30 @@
 import {
   CheckCircleOutlined,
   CalendarOutlined,
+  LogoutOutlined,
   PhoneOutlined
 } from '@ant-design/icons';
 import { Button, Layout, Space, Typography } from 'antd';
 
-const { Content } = Layout;
+const { Header, Content } = Layout;
 
 export function HomePage() {
+  function handleLogout() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('authUser');
+    window.dispatchEvent(new Event('auth:logout'));
+  }
+
   return (
     <Layout className="home-shell">
+      <Header className="app-header">
+        <Typography.Title level={3} className="app-title">
+          首页
+        </Typography.Title>
+        <Button icon={<LogoutOutlined />} onClick={handleLogout}>
+          退出登录
+        </Button>
+      </Header>
       <Content className="home-content">
         <div className="home-heading">
           <Typography.Title level={1} className="home-title">

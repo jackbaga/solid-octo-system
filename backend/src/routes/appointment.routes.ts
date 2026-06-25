@@ -1,5 +1,6 @@
 import { NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import {
+  exportAppointments,
   exportAppointmentCredentials,
   getAppointmentDayInfo,
   getAppointmentTaskConfigs,
@@ -20,6 +21,7 @@ const asyncHandler =
 appointmentRouter.get('/', asyncHandler(getAppointments));
 appointmentRouter.get('/day', asyncHandler(getAppointmentDayInfo));
 appointmentRouter.put('/day', asyncHandler(putAppointmentDayInfo));
+appointmentRouter.get('/export', asyncHandler(exportAppointments));
 appointmentRouter.get('/export-credentials', asyncHandler(exportAppointmentCredentials));
 appointmentRouter.post('/day-summary', asyncHandler(postAppointmentDaySummary));
 appointmentRouter.get('/task-configs', asyncHandler(getAppointmentTaskConfigs));

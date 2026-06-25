@@ -1,9 +1,5 @@
-import axios from 'axios';
 import { Appointment, AppointmentPayload, AppointmentTaskConfig, AppointmentTaskConfigPayload } from '../types/appointment';
-
-const api = axios.create({
-  baseURL: '/api'
-});
+import { api } from './api';
 
 export async function fetchAppointments(date?: string) {
   const response = await api.get<Appointment[]>('/appointments', {
@@ -57,6 +53,15 @@ export async function updateAppointmentDay(date: string, assistants: string[]) {
 export async function exportAppointmentCredentials(date: string) {
   const response = await api.get<Blob>('/appointments/export-credentials', {
     params: { date },
+    responseType: 'blob'
+  });
+
+  return response.data;
+}
+
+export async function exportAppointments(date?: string) {
+  const response = await api.get<Blob>('/appointments/export', {
+    params: date ? { date } : undefined,
     responseType: 'blob'
   });
 
