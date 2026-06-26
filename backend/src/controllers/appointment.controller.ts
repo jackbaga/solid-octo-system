@@ -21,6 +21,14 @@ function parseId(value: string) {
   return Number.isInteger(id) && id > 0 ? id : undefined;
 }
 
+function getUserId(req: Request) {
+  if (!req.user) {
+    throw new Error('UNAUTHORIZED');
+  }
+
+  return req.user.id;
+}
+
 function parseOptionalVolunteerId(value: unknown) {
   if (value === undefined || value === null || value === '') {
     return null;
@@ -195,39 +203,44 @@ function validateTaskConfigBody(body: Record<string, unknown>) {
 }
 
 export async function getAppointments(req: Request, res: Response) {
+  const userId = getUserId(req);
   const date = typeof req.query.date === 'string' ? req.query.date : undefined;
-  const appointments = await listAppointments(date);
+  const appointments = await listAppointments(userId, date);
   return res.json(appointments);
 }
 
-export async function getAppointmentTaskConfigs(_req: Request, res: Response) {
-  const configs = await listAppointmentTaskConfigs();
+export async function getAppointmentTaskConfigs(req: Request, res: Response) {
+  const userId = getUserId(req);
+  const configs = await listAppointmentTaskConfigs(userId);
   return res.json(configs);
 }
 
 export async function putAppointmentTaskConfigs(req: Request, res: Response) {
+  const userId = getUserId(req);
   const { errors, configs } = validateTaskConfigBody(req.body);
 
   if (errors.length > 0) {
     return res.status(400).json({ message: '任务配置有误。', errors });
   }
 
-  const savedConfigs = await replaceAppointmentTaskConfigs(configs);
+  const savedConfigs = await replaceAppointmentTaskConfigs(userId, configs);
   return res.json(savedConfigs);
 }
 
 export async function getAppointmentDayInfo(req: Request, res: Response) {
+  const userId = getUserId(req);
   const date = typeof req.query.date === 'string' ? req.query.date : '';
 
   if (!date) {
     return res.status(400).json({ message: '日期不能为空。' });
   }
 
-  const day = await getAppointmentDay(date);
+  const day = await getAppointmentDay(userId, date);
   return res.json(day);
 }
 
 export async function putAppointmentDayInfo(req: Request, res: Response) {
+  const userId = getUserId(req);
   const date = typeof req.body.date === 'string' ? req.body.date : '';
   const assistants = Array.isArray(req.body.assistants)
     ? req.body.assistants.map((assistant: unknown) => String(assistant).trim()).filter(Boolean)
@@ -237,18 +250,19 @@ export async function putAppointmentDayInfo(req: Request, res: Response) {
     return res.status(400).json({ message: '日期不能为空。' });
   }
 
-  const day = await updateAppointmentDay(date, assistants);
+  const day = await updateAppointmentDay(userId, date, assistants);
   return res.json(day);
 }
 
 export async function exportAppointmentCredentials(req: Request, res: Response) {
+  const userId = getUserId(req);
   const date = typeof req.query.date === 'string' ? req.query.date : '';
 
   if (!date) {
     return res.status(400).json({ message: '日期不能为空。' });
   }
 
-  const appointments = await listAppointments(date);
+  const appointments = await listAppointments(userId, date);
   const rows = appointments
     .filter((appointment) => appointment.volunteer)
     .map((appointment) => ({
@@ -276,11 +290,12 @@ export async function exportAppointmentCredentials(req: Request, res: Response) 
 }
 
 export async function exportAppointments(req: Request, res: Response) {
+  const userId = getUserId(req);
   const date = typeof req.query.date === 'string' ? req.query.date : undefined;
   const [appointments, appointmentDays, taskCompletionRecords] = await Promise.all([
-    listAppointments(date),
-    listAppointmentDays(),
-    listTaskCompletionRecords()
+    listAppointments(userId, date),
+    listAppointmentDays(userId),
+    listTaskCompletionRecords(userId)
   ]);
   const sortedAppointments = [...appointments].sort((a, b) =>
     a.date.localeCompare(b.date) ||
@@ -338,6 +353,7 @@ export async function exportAppointments(req: Request, res: Response) {
 }
 
 export async function postAppointmentDaySummary(req: Request, res: Response) {
+  const userId = getUserId(req);
   const date = typeof req.body.date === 'string' ? req.body.date : '';
   const incompleteAppointmentIds = Array.isArray(req.body.incompleteAppointmentIds)
     ? req.body.incompleteAppointmentIds.map(Number).filter((id: number) => Number.isInteger(id) && id > 0)
@@ -347,18 +363,19 @@ export async function postAppointmentDaySummary(req: Request, res: Response) {
     return res.status(400).json({ message: '日期不能为空。' });
   }
 
-  const appointments = await syncDayTaskCompletion(date, incompleteAppointmentIds);
+  const appointments = await syncDayTaskCompletion(userId, date, incompleteAppointmentIds);
   return res.json({ message: '当日任务完成度已更新。', appointments });
 }
 
 export async function postAppointment(req: Request, res: Response) {
+  const userId = getUserId(req);
   const errors = validateAppointmentBody(req.body);
 
   if (errors.length > 0) {
     return res.status(400).json({ message: '预约信息有误。', errors });
   }
 
-  const appointment = await createAppointment({
+  const appointment = await createAppointment(userId, {
     volunteerId: parseOptionalVolunteerId(req.body.volunteerId),
     subjectName: normalizeOptionalText(req.body.subjectName) ?? '',
     date: String(req.body.date).trim(),
@@ -375,6 +392,7 @@ export async function postAppointment(req: Request, res: Response) {
 }
 
 export async function putAppointment(req: Request, res: Response) {
+  const userId = getUserId(req);
   const id = parseId(req.params.id);
 
   if (!id) {
@@ -387,7 +405,7 @@ export async function putAppointment(req: Request, res: Response) {
     return res.status(400).json({ message: '预约信息有误。', errors });
   }
 
-  const appointment = await updateAppointment(id, {
+  const appointment = await updateAppointment(userId, id, {
     ...('volunteerId' in req.body ? { volunteerId: parseOptionalVolunteerId(req.body.volunteerId) } : {}),
     ...('subjectName' in req.body ? { subjectName: String(req.body.subjectName).trim() } : {}),
     ...('date' in req.body ? { date: String(req.body.date).trim() } : {}),
@@ -408,6 +426,7 @@ export async function putAppointment(req: Request, res: Response) {
 }
 
 export async function removeAppointment(req: Request, res: Response) {
+  const userId = getUserId(req);
   const id = parseId(req.params.id);
 
   if (!id) {
@@ -415,7 +434,7 @@ export async function removeAppointment(req: Request, res: Response) {
   }
 
   try {
-    await deleteAppointment(id);
+    await deleteAppointment(userId, id);
     return res.status(204).send();
   } catch {
     return res.status(404).json({ message: '未找到该预约。' });

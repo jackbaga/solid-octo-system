@@ -68,9 +68,12 @@ export function isValidAppointmentStatus(value: unknown): value is AppointmentSt
   return typeof value === 'string' && Object.values(AppointmentStatus).includes(value as AppointmentStatus);
 }
 
-export async function listAppointments(date?: string) {
+export async function listAppointments(userId: number, date?: string) {
   return prisma.appointment.findMany({
-    where: date ? { date } : undefined,
+    where: {
+      userId,
+      ...(date ? { date } : {})
+    },
     include: appointmentInclude,
     orderBy: [{ time: 'asc' }, { createdAt: 'asc' }]
   });
@@ -78,6 +81,7 @@ export async function listAppointments(date?: string) {
 
 async function syncAssignedTeacherFromAppointment(
   tx: Prisma.TransactionClient,
+  userId: number,
   subjectName: string,
   volunteerId?: number | null
 ) {
@@ -87,13 +91,13 @@ async function syncAssignedTeacherFromAppointment(
     return;
   }
 
-  const volunteer = await tx.volunteer.findUnique({
-    where: { id: volunteerId },
+  const volunteer = await tx.volunteer.findFirst({
+    where: { id: volunteerId, userId },
     select: { teacher: true }
   });
 
   const existing = await tx.taskCompletionRecord.findFirst({
-    where: { subjectName: normalizedName },
+    where: { userId, subjectName: normalizedName },
     orderBy: [{ updatedAt: 'desc' }]
   });
 
@@ -109,17 +113,22 @@ async function syncAssignedTeacherFromAppointment(
     data: {
       subjectName: normalizedName,
       subjectCode: '',
+      userId,
       assignedTeacher: volunteer?.teacher ?? null,
       tasks: {}
     }
   });
 }
 
-export async function createAppointment(input: AppointmentInput) {
+export async function createAppointment(userId: number, input: AppointmentInput) {
   return prisma.$transaction(async (tx) => {
+    const volunteerId = input.volunteerId
+      ? (await tx.volunteer.findFirst({ where: { id: input.volunteerId, userId }, select: { id: true } }))?.id ?? null
+      : null;
     const appointment = await tx.appointment.create({
       data: {
-        volunteerId: input.volunteerId ?? null,
+        userId,
+        volunteerId,
         subjectName: input.subjectName ?? '',
         date: input.date,
         time: input.time,
@@ -133,31 +142,34 @@ export async function createAppointment(input: AppointmentInput) {
       include: appointmentInclude
     });
 
-    if (input.volunteerId) {
-      await tx.volunteer.update({
-        where: { id: input.volunteerId },
+    if (volunteerId) {
+      await tx.volunteer.updateMany({
+        where: { id: volunteerId, userId },
         data: { status: VolunteerStatus.APPOINTED }
       });
     }
 
-    await syncAssignedTeacherFromAppointment(tx, appointment.subjectName, appointment.volunteerId);
+    await syncAssignedTeacherFromAppointment(tx, userId, appointment.subjectName, appointment.volunteerId);
 
     return appointment;
   });
 }
 
-export async function updateAppointment(id: number, input: AppointmentUpdateInput) {
-  const current = await prisma.appointment.findUnique({ where: { id } });
+export async function updateAppointment(userId: number, id: number, input: AppointmentUpdateInput) {
+  const current = await prisma.appointment.findFirst({ where: { id, userId } });
 
   if (!current) {
     return null;
   }
 
   return prisma.$transaction(async (tx) => {
+    const volunteerId = 'volunteerId' in input && input.volunteerId
+      ? (await tx.volunteer.findFirst({ where: { id: input.volunteerId, userId }, select: { id: true } }))?.id ?? null
+      : input.volunteerId ?? null;
     const appointment = await tx.appointment.update({
       where: { id },
       data: {
-        ...('volunteerId' in input ? { volunteerId: input.volunteerId ?? null } : {}),
+        ...('volunteerId' in input ? { volunteerId } : {}),
         ...('subjectName' in input ? { subjectName: input.subjectName } : {}),
         ...('date' in input ? { date: input.date } : {}),
         ...('time' in input ? { time: input.time } : {}),
@@ -171,20 +183,26 @@ export async function updateAppointment(id: number, input: AppointmentUpdateInpu
       include: appointmentInclude
     });
 
-    if (input.volunteerId) {
-      await tx.volunteer.update({
-        where: { id: input.volunteerId },
+    if (volunteerId) {
+      await tx.volunteer.updateMany({
+        where: { id: volunteerId, userId },
         data: { status: VolunteerStatus.APPOINTED }
       });
     }
 
-    await syncAssignedTeacherFromAppointment(tx, appointment.subjectName, appointment.volunteerId);
+    await syncAssignedTeacherFromAppointment(tx, userId, appointment.subjectName, appointment.volunteerId);
 
     return appointment;
   });
 }
 
-export async function deleteAppointment(id: number) {
+export async function deleteAppointment(userId: number, id: number) {
+  const appointment = await prisma.appointment.findFirst({ where: { id, userId }, select: { id: true } });
+
+  if (!appointment) {
+    throw new Error('NOT_FOUND');
+  }
+
   await prisma.appointment.delete({ where: { id } });
 }
 
@@ -197,8 +215,9 @@ const defaultTaskConfigs: AppointmentTaskConfigInput[] = ['磁共振', '脑电',
   )
 }));
 
-export async function listAppointmentTaskConfigs() {
+export async function listAppointmentTaskConfigs(userId: number) {
   const configs = await prisma.appointmentTaskConfig.findMany({
+    where: { userId },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }]
   });
 
@@ -209,20 +228,23 @@ export async function listAppointmentTaskConfigs() {
   await prisma.appointmentTaskConfig.createMany({
     data: defaultTaskConfigs.map((config, index) => ({
       ...config,
+      userId,
       sortOrder: index + 1
     }))
   });
 
   return prisma.appointmentTaskConfig.findMany({
+    where: { userId },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }]
   });
 }
 
-export async function replaceAppointmentTaskConfigs(configs: AppointmentTaskConfigInput[]) {
+export async function replaceAppointmentTaskConfigs(userId: number, configs: AppointmentTaskConfigInput[]) {
   await prisma.$transaction(async (tx) => {
-    await tx.appointmentTaskConfig.deleteMany();
+    await tx.appointmentTaskConfig.deleteMany({ where: { userId } });
     await tx.appointmentTaskConfig.createMany({
       data: configs.map((config, index) => ({
+        userId,
         name: config.name,
         sessions: config.sessions,
         rounds: config.rounds,
@@ -232,32 +254,32 @@ export async function replaceAppointmentTaskConfigs(configs: AppointmentTaskConf
     });
   });
 
-  return listAppointmentTaskConfigs();
+  return listAppointmentTaskConfigs(userId);
 }
 
-export async function getAppointmentDay(date: string) {
+export async function getAppointmentDay(userId: number, date: string) {
   return prisma.appointmentDay.upsert({
-    where: { date },
+    where: { userId_date: { userId, date } },
     update: {},
-    create: { date, assistants: [] }
+    create: { userId, date, assistants: [] }
   });
 }
 
-export async function listAppointmentDays() {
-  return prisma.appointmentDay.findMany();
+export async function listAppointmentDays(userId: number) {
+  return prisma.appointmentDay.findMany({ where: { userId } });
 }
 
-export async function updateAppointmentDay(date: string, assistants: string[]) {
+export async function updateAppointmentDay(userId: number, date: string, assistants: string[]) {
   return prisma.appointmentDay.upsert({
-    where: { date },
+    where: { userId_date: { userId, date } },
     update: { assistants },
-    create: { date, assistants }
+    create: { userId, date, assistants }
   });
 }
 
-export async function syncDayTaskCompletion(date: string, incompleteAppointmentIds: number[]) {
+export async function syncDayTaskCompletion(userId: number, date: string, incompleteAppointmentIds: number[]) {
   const appointments = await prisma.appointment.findMany({
-    where: { date },
+    where: { userId, date },
     select: { id: true }
   });
   const incompleteSet = new Set(incompleteAppointmentIds);
@@ -270,6 +292,7 @@ export async function syncDayTaskCompletion(date: string, incompleteAppointmentI
         where: { appointmentId: appointment.id },
         update: { completed, date },
         create: {
+          userId,
           appointmentId: appointment.id,
           date,
           completed
@@ -283,5 +306,5 @@ export async function syncDayTaskCompletion(date: string, incompleteAppointmentI
     }
   });
 
-  return listAppointments(date);
+  return listAppointments(userId, date);
 }

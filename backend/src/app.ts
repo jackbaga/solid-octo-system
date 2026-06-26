@@ -40,6 +40,10 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
     if (err.code === 'P2003') {
       return res.status(400).json({ message: '关联数据无效，请刷新后重试。' });
     }
+
+    if (err.code === 'P2021' || err.code === 'P2022') {
+      return res.status(500).json({ message: '数据库结构不是最新，请先执行数据库迁移。' });
+    }
   }
 
   console.error(err);

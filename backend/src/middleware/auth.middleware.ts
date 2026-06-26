@@ -10,5 +10,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ message: '请先登录。' });
   }
 
+  req.user = user;
   return next();
 }

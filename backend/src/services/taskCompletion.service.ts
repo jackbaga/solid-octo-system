@@ -98,23 +98,30 @@ function replaceTaskRound(taskName: string, currentRound: string, nextRound: str
   return `${nextRound}-${taskName}`;
 }
 
-export async function listTaskCompletionRecords() {
+export async function listTaskCompletionRecords(userId: number) {
   return prisma.taskCompletionRecord.findMany({
+    where: { userId },
     orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }]
   });
 }
 
-export async function deleteTaskCompletionRecord(id: number) {
+export async function deleteTaskCompletionRecord(userId: number, id: number) {
+  const record = await prisma.taskCompletionRecord.findFirst({ where: { id, userId }, select: { id: true } });
+
+  if (!record) {
+    throw new Error('NOT_FOUND');
+  }
+
   await prisma.taskCompletionRecord.delete({ where: { id } });
 }
 
-export async function clearTaskCompletionRecords() {
-  const result = await prisma.taskCompletionRecord.deleteMany();
+export async function clearTaskCompletionRecords(userId: number) {
+  const result = await prisma.taskCompletionRecord.deleteMany({ where: { userId } });
   return result.count;
 }
 
-export async function updateTaskCompletionRecord(id: number, input: UpdateTaskCompletionRecordInput) {
-  const current = await prisma.taskCompletionRecord.findUnique({ where: { id } });
+export async function updateTaskCompletionRecord(userId: number, id: number, input: UpdateTaskCompletionRecordInput) {
+  const current = await prisma.taskCompletionRecord.findFirst({ where: { id, userId } });
 
   if (!current) {
     return null;
@@ -137,7 +144,7 @@ export async function updateTaskCompletionRecord(id: number, input: UpdateTaskCo
   });
 }
 
-export async function syncTaskCompletionTeacher(subjectName: string, assignedTeacher?: Teacher | null) {
+export async function syncTaskCompletionTeacher(userId: number, subjectName: string, assignedTeacher?: Teacher | null) {
   const normalizedName = subjectName.trim();
 
   if (!normalizedName) {
@@ -145,7 +152,7 @@ export async function syncTaskCompletionTeacher(subjectName: string, assignedTea
   }
 
   const existing = await prisma.taskCompletionRecord.findFirst({
-    where: { subjectName: normalizedName },
+    where: { userId, subjectName: normalizedName },
     orderBy: [{ updatedAt: 'desc' }]
   });
 
@@ -160,20 +167,21 @@ export async function syncTaskCompletionTeacher(subjectName: string, assignedTea
     data: {
       subjectName: normalizedName,
       subjectCode: '',
+      userId,
       assignedTeacher: assignedTeacher ?? null,
       tasks: {}
     }
   });
 }
 
-export async function promoteTaskCompletionRecord(id: number, currentRound: string) {
+export async function promoteTaskCompletionRecord(userId: number, id: number, currentRound: string) {
   const nextRound = getNextRoundName(currentRound);
 
   if (!nextRound) {
     throw new Error('当前轮次不能进入下一轮。');
   }
 
-  const current = await prisma.taskCompletionRecord.findUnique({ where: { id } });
+  const current = await prisma.taskCompletionRecord.findFirst({ where: { id, userId } });
 
   if (!current) {
     return null;
@@ -211,7 +219,7 @@ export async function promoteTaskCompletionRecord(id: number, currentRound: stri
   });
 }
 
-export async function upsertTaskCompletionRecords(records: TaskCompletionRecordInput[]) {
+export async function upsertTaskCompletionRecords(userId: number, records: TaskCompletionRecordInput[]) {
   let created = 0;
   let updated = 0;
 
@@ -220,7 +228,8 @@ export async function upsertTaskCompletionRecords(records: TaskCompletionRecordI
       const subjectCode = normalizeCode(record.subjectCode);
       const existing = await tx.taskCompletionRecord.findUnique({
         where: {
-          subjectName_subjectCode: {
+          userId_subjectName_subjectCode: {
+            userId,
             subjectName: record.subjectName,
             subjectCode
           }
@@ -245,6 +254,7 @@ export async function upsertTaskCompletionRecords(records: TaskCompletionRecordI
           data: {
             subjectName: record.subjectName,
             subjectCode,
+            userId,
             paymentStatus: record.paymentStatus ?? null,
             cognitiveReportStatus: record.cognitiveReportStatus ?? null,
             remark: record.remark ?? null,
@@ -259,7 +269,7 @@ export async function upsertTaskCompletionRecords(records: TaskCompletionRecordI
   return { created, updated, total: records.length };
 }
 
-export async function syncAppointmentCompletions(items: AppointmentCompletionInput[]) {
+export async function syncAppointmentCompletions(userId: number, items: AppointmentCompletionInput[]) {
   let touched = 0;
 
   await prisma.$transaction(async (tx) => {
@@ -276,14 +286,15 @@ export async function syncAppointmentCompletions(items: AppointmentCompletionInp
       const existing = subjectCode
         ? await tx.taskCompletionRecord.findUnique({
             where: {
-              subjectName_subjectCode: {
+              userId_subjectName_subjectCode: {
+                userId,
                 subjectName,
                 subjectCode
               }
             }
           })
         : await tx.taskCompletionRecord.findFirst({
-            where: { subjectName },
+            where: { userId, subjectName },
             orderBy: [{ updatedAt: 'desc' }]
           });
       const tasks = asTaskMap(existing?.tasks);
@@ -307,6 +318,7 @@ export async function syncAppointmentCompletions(items: AppointmentCompletionInp
           data: {
             subjectName,
             subjectCode,
+            userId,
             tasks: nextTasks
           }
         });

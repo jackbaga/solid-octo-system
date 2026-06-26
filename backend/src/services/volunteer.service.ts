@@ -56,10 +56,15 @@ export function normalizeTeacher(status: VolunteerStatus, teacher?: Teacher | nu
 }
 
 export async function listVolunteers(status?: VolunteerStatus) {
-  const defaultSheet = await getDefaultVolunteerSheet();
+  throw new Error('listVolunteers requires userId');
+}
+
+export async function listVolunteersForUser(userId: number, status?: VolunteerStatus) {
+  const defaultSheet = await getDefaultVolunteerSheet(userId);
 
   return prisma.volunteer.findMany({
     where: {
+      userId,
       sheetId: defaultSheet.id,
       ...(status ? { status } : {})
     },
@@ -67,9 +72,10 @@ export async function listVolunteers(status?: VolunteerStatus) {
   });
 }
 
-export async function listVolunteersBySheet(sheetId: number, status?: VolunteerStatus) {
+export async function listVolunteersBySheet(userId: number, sheetId: number, status?: VolunteerStatus) {
   return prisma.volunteer.findMany({
     where: {
+      userId,
       sheetId,
       ...(status ? { status } : {})
     },
@@ -77,14 +83,16 @@ export async function listVolunteersBySheet(sheetId: number, status?: VolunteerS
   });
 }
 
-export async function listVolunteerSheets() {
+export async function listVolunteerSheets(userId: number) {
   return prisma.volunteerSheet.findMany({
+    where: { userId },
     orderBy: { createdAt: 'asc' }
   });
 }
 
-export async function getDefaultVolunteerSheet() {
+export async function getDefaultVolunteerSheet(userId: number) {
   const firstSheet = await prisma.volunteerSheet.findFirst({
+    where: { userId },
     orderBy: { createdAt: 'asc' }
   });
 
@@ -93,18 +101,18 @@ export async function getDefaultVolunteerSheet() {
   }
 
   return prisma.volunteerSheet.create({
-    data: { name: '默认表格' }
+    data: { name: '默认表格', userId }
   });
 }
 
-export async function createVolunteerSheet(input: CreateVolunteerSheetInput) {
+export async function createVolunteerSheet(userId: number, input: CreateVolunteerSheetInput) {
   return prisma.volunteerSheet.create({
-    data: { name: input.name }
+    data: { name: input.name, userId }
   });
 }
 
-export async function updateVolunteerSheet(id: number, input: CreateVolunteerSheetInput) {
-  const current = await prisma.volunteerSheet.findUnique({ where: { id } });
+export async function updateVolunteerSheet(userId: number, id: number, input: CreateVolunteerSheetInput) {
+  const current = await prisma.volunteerSheet.findFirst({ where: { id, userId } });
 
   if (!current) {
     return null;
@@ -117,7 +125,16 @@ export async function updateVolunteerSheet(id: number, input: CreateVolunteerShe
 }
 
 export async function deleteVolunteerSheet(id: number) {
-  const sheetCount = await prisma.volunteerSheet.count();
+  throw new Error('deleteVolunteerSheet requires userId');
+}
+
+export async function deleteVolunteerSheetForUser(userId: number, id: number) {
+  const sheetCount = await prisma.volunteerSheet.count({ where: { userId } });
+  const current = await prisma.volunteerSheet.findFirst({ where: { id, userId } });
+
+  if (!current) {
+    throw new Error('NOT_FOUND');
+  }
 
   if (sheetCount <= 1) {
     throw new Error('至少需要保留一个表格。');
@@ -126,11 +143,17 @@ export async function deleteVolunteerSheet(id: number) {
   await prisma.volunteerSheet.delete({ where: { id } });
 }
 
-export async function createVolunteer(input: CreateVolunteerInput) {
+export async function createVolunteer(userId: number, input: CreateVolunteerInput) {
   const status = input.status ?? VolunteerStatus.NOT_CALLED;
+  const sheet = await prisma.volunteerSheet.findFirst({ where: { id: input.sheetId, userId }, select: { id: true } });
+
+  if (!sheet) {
+    throw new Error('NOT_FOUND');
+  }
 
   return prisma.volunteer.create({
     data: {
+      userId,
       name: input.name,
       sheetId: input.sheetId,
       age: input.age ?? null,
@@ -144,8 +167,8 @@ export async function createVolunteer(input: CreateVolunteerInput) {
   });
 }
 
-export async function updateVolunteer(id: number, input: UpdateVolunteerInput) {
-  const current = await prisma.volunteer.findUnique({ where: { id } });
+export async function updateVolunteer(userId: number, id: number, input: UpdateVolunteerInput) {
+  const current = await prisma.volunteer.findFirst({ where: { id, userId } });
 
   if (!current) {
     return null;
@@ -171,10 +194,20 @@ export async function updateVolunteer(id: number, input: UpdateVolunteerInput) {
 }
 
 export async function deleteVolunteer(id: number) {
+  throw new Error('deleteVolunteer requires userId');
+}
+
+export async function deleteVolunteerForUser(userId: number, id: number) {
+  const current = await prisma.volunteer.findFirst({ where: { id, userId } });
+
+  if (!current) {
+    throw new Error('NOT_FOUND');
+  }
+
   await prisma.volunteer.delete({ where: { id } });
 }
 
-export async function importVolunteerRows(sheetId: number, rows: ImportVolunteerInput[]) {
+export async function importVolunteerRows(userId: number, sheetId: number, rows: ImportVolunteerInput[]) {
   let created = 0;
   let updated = 0;
 
@@ -182,6 +215,7 @@ export async function importVolunteerRows(sheetId: number, rows: ImportVolunteer
     for (const row of rows) {
       const existing = await tx.volunteer.findFirst({
         where: {
+          userId,
           sheetId,
           name: row.name,
           phone: row.phone
@@ -200,6 +234,7 @@ export async function importVolunteerRows(sheetId: number, rows: ImportVolunteer
         await tx.volunteer.create({
           data: {
             name: row.name,
+            userId,
             sheetId,
             age: row.age ?? null,
             phone: row.phone,

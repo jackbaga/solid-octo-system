@@ -20,6 +20,14 @@ function parseId(value: string) {
   return Number.isInteger(id) && id > 0 ? id : undefined;
 }
 
+function getUserId(req: Request) {
+  if (!req.user) {
+    throw new Error('UNAUTHORIZED');
+  }
+
+  return req.user.id;
+}
+
 function normalizeHeader(value: unknown) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
@@ -129,8 +137,8 @@ function sortSessions(sessions: string[]) {
 
 type AllowedCompletionMap = Map<string, Map<string, Set<string>>>;
 
-async function buildAllowedCompletionMap() {
-  const configs = await listAppointmentTaskConfigs();
+async function buildAllowedCompletionMap(userId: number) {
+  const configs = await listAppointmentTaskConfigs(userId);
   const allowed: AllowedCompletionMap = new Map();
 
   for (const config of configs) {
@@ -201,8 +209,8 @@ function filterRecordsBySettings(records: TaskCompletionRecordInput[], allowed: 
   }));
 }
 
-async function buildRoundExportDefinitions() {
-  const configs = await listAppointmentTaskConfigs();
+async function buildRoundExportDefinitions(userId: number) {
+  const configs = await listAppointmentTaskConfigs(userId);
 
   return roundLabels.map((roundName, roundIndex) => {
     const round = roundIndex + 1;
@@ -622,9 +630,10 @@ function parseLegacyCompletionWorkbook(buffer: Buffer) {
   return { records, errors };
 }
 
-export async function getTaskCompletionRecords(_req: Request, res: Response) {
-  const records = await listTaskCompletionRecords();
-  const allowed = await buildAllowedCompletionMap();
+export async function getTaskCompletionRecords(req: Request, res: Response) {
+  const userId = getUserId(req);
+  const records = await listTaskCompletionRecords(userId);
+  const allowed = await buildAllowedCompletionMap(userId);
   const filteredRecords = records.map((record) => ({
     ...record,
     tasks: filterTasksBySettings(record.tasks as CompletionTaskMap, allowed)
@@ -633,6 +642,7 @@ export async function getTaskCompletionRecords(_req: Request, res: Response) {
 }
 
 export async function removeTaskCompletionRecord(req: Request, res: Response) {
+  const userId = getUserId(req);
   const id = parseId(req.params.id);
 
   if (!id) {
@@ -640,7 +650,7 @@ export async function removeTaskCompletionRecord(req: Request, res: Response) {
   }
 
   try {
-    await deleteTaskCompletionRecord(id);
+    await deleteTaskCompletionRecord(userId, id);
     return res.status(204).send();
   } catch {
     return res.status(404).json({ message: '未找到该任务完成度记录。' });
@@ -648,13 +658,14 @@ export async function removeTaskCompletionRecord(req: Request, res: Response) {
 }
 
 export async function patchTaskCompletionRecord(req: Request, res: Response) {
+  const userId = getUserId(req);
   const id = parseId(req.params.id);
 
   if (!id) {
     return res.status(400).json({ message: '任务完成度记录编号无效。' });
   }
 
-  const record = await updateTaskCompletionRecord(id, {
+  const record = await updateTaskCompletionRecord(userId, id, {
     ...('parentAccount' in req.body ? { parentAccount: req.body.parentAccount ? String(req.body.parentAccount).trim() : null } : {}),
     ...('parentPassword' in req.body ? { parentPassword: req.body.parentPassword ? String(req.body.parentPassword).trim() : null } : {}),
     ...('parentPhone' in req.body ? { parentPhone: req.body.parentPhone ? String(req.body.parentPhone).trim() : null } : {}),
@@ -675,6 +686,7 @@ export async function patchTaskCompletionRecord(req: Request, res: Response) {
 }
 
 export async function promoteTaskCompletionRecordController(req: Request, res: Response) {
+  const userId = getUserId(req);
   const id = parseId(req.params.id);
   const currentRound = typeof req.body.currentRound === 'string' ? req.body.currentRound.trim() : '';
 
@@ -687,7 +699,7 @@ export async function promoteTaskCompletionRecordController(req: Request, res: R
   }
 
   try {
-    const record = await promoteTaskCompletionRecord(id, currentRound);
+    const record = await promoteTaskCompletionRecord(userId, id, currentRound);
 
     if (!record) {
       return res.status(404).json({ message: '未找到该任务完成度记录。' });
@@ -703,12 +715,14 @@ export async function promoteTaskCompletionRecordController(req: Request, res: R
   }
 }
 
-export async function clearTaskCompletionRecordsController(_req: Request, res: Response) {
-  const count = await clearTaskCompletionRecords();
+export async function clearTaskCompletionRecordsController(req: Request, res: Response) {
+  const userId = getUserId(req);
+  const count = await clearTaskCompletionRecords(userId);
   return res.json({ message: '任务完成度记录已清除。', count });
 }
 
 export async function importTaskCompletionRecords(req: Request, res: Response) {
+  const userId = getUserId(req);
   if (!req.file || req.file.size === 0) {
     return res.status(400).json({ message: '文件为空。' });
   }
@@ -725,13 +739,14 @@ export async function importTaskCompletionRecords(req: Request, res: Response) {
     return res.status(400).json({ message: '任务完成度导入失败。', errors });
   }
 
-  const allowed = await buildAllowedCompletionMap();
+  const allowed = await buildAllowedCompletionMap(userId);
   const filteredRecords = filterRecordsBySettings(records, allowed);
-  const result = await upsertTaskCompletionRecords(filteredRecords);
+  const result = await upsertTaskCompletionRecords(userId, filteredRecords);
   return res.json({ message: '任务完成度导入完成。', ...result });
 }
 
 export async function syncTaskCompletionFromAppointments(req: Request, res: Response) {
+  const userId = getUserId(req);
   const items = Array.isArray(req.body.items) ? req.body.items : [];
   const normalizedItems: AppointmentCompletionInput[] = items.map((item: Record<string, unknown>) => ({
     subjectName: String(item.subjectName ?? '').trim(),
@@ -741,19 +756,20 @@ export async function syncTaskCompletionFromAppointments(req: Request, res: Resp
     completed: Boolean(item.completed)
   }));
 
-  const result = await syncAppointmentCompletions(normalizedItems);
-  const records = await listTaskCompletionRecords();
+  const result = await syncAppointmentCompletions(userId, normalizedItems);
+  const records = await listTaskCompletionRecords(userId);
   return res.json({ message: '任务完成状态已同步。', ...result, records });
 }
 
-export async function exportTaskCompletionRecords(_req: Request, res: Response) {
-  const records = await listTaskCompletionRecords();
-  const allowed = await buildAllowedCompletionMap();
+export async function exportTaskCompletionRecords(req: Request, res: Response) {
+  const userId = getUserId(req);
+  const records = await listTaskCompletionRecords(userId);
+  const allowed = await buildAllowedCompletionMap(userId);
   const filteredRecords = records.map((record) => ({
     ...record,
     tasks: filterTasksBySettings(record.tasks as CompletionTaskMap, allowed)
   }));
-  const roundDefinitions = await buildRoundExportDefinitions();
+  const roundDefinitions = await buildRoundExportDefinitions(userId);
   const workbook = XLSX.utils.book_new();
 
   for (const definition of roundDefinitions) {

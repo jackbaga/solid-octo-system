@@ -9,6 +9,8 @@ datasource db {
 
 model Volunteer {
   id           Int             @id @default(autoincrement())
+  userId       Int?
+  user         User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
   sheetId      Int
   sheet        VolunteerSheet  @relation(fields: [sheetId], references: [id], onDelete: Cascade)
   name         String
@@ -24,21 +26,29 @@ model Volunteer {
   updatedAt    DateTime        @updatedAt
 
   @@index([status])
+  @@index([userId])
   @@index([sheetId])
   @@index([phone])
-  @@unique([sheetId, name, phone])
+  @@unique([userId, sheetId, name, phone])
 }
 
 model VolunteerSheet {
   id         Int         @id @default(autoincrement())
-  name       String      @unique
+  userId     Int?
+  user       User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
   volunteers Volunteer[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
+
+  @@index([userId])
+  @@unique([userId, name])
 }
 
 model Appointment {
   id          Int      @id @default(autoincrement())
+  userId      Int?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   volunteerId Int?
   volunteer   Volunteer? @relation(fields: [volunteerId], references: [id])
@@ -59,30 +69,43 @@ model Appointment {
   updatedAt   DateTime @updatedAt
 
   @@index([date])
+  @@index([userId])
   @@index([volunteerId])
 }
 
 model AppointmentTaskConfig {
   id            Int      @id @default(autoincrement())
-  name          String   @unique
+  userId        Int?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
   sessions      String[] @default([])
   rounds        Int[]    @default([])
   roundSessions Json     @default("{}")
   sortOrder     Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@unique([userId, name])
 }
 
 model AppointmentDay {
   id         Int      @id @default(autoincrement())
-  date       String   @unique
+  userId     Int?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date       String
   assistants String[] @default([])
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@unique([userId, date])
 }
 
 model TaskCompletion {
   id            Int         @id @default(autoincrement())
+  userId        Int?
+  user          User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
   appointmentId Int         @unique
   appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
   date          String
@@ -91,10 +114,13 @@ model TaskCompletion {
   updatedAt     DateTime    @updatedAt
 
   @@index([date])
+  @@index([userId])
 }
 
 model TaskCompletionRecord {
   id                    Int      @id @default(autoincrement())
+  userId                Int?
+  user                  User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   subjectName           String
   subjectCode           String   @default("")
   parentAccount         String?
@@ -110,7 +136,8 @@ model TaskCompletionRecord {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  @@unique([subjectName, subjectCode])
+  @@unique([userId, subjectName, subjectCode])
+  @@index([userId])
   @@index([subjectName])
 }
 
@@ -118,6 +145,13 @@ model User {
   id           Int      @id @default(autoincrement())
   username     String   @unique
   passwordHash String
+  volunteers   Volunteer[]
+  volunteerSheets VolunteerSheet[]
+  appointments Appointment[]
+  appointmentTaskConfigs AppointmentTaskConfig[]
+  appointmentDays AppointmentDay[]
+  taskCompletions TaskCompletion[]
+  taskCompletionRecords TaskCompletionRecord[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

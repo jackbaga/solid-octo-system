@@ -4,14 +4,14 @@ import type { ImportVolunteerInput } from '../services/volunteer.service.js';
 import {
   createVolunteerSheet,
   createVolunteer,
-  deleteVolunteerSheet,
-  deleteVolunteer,
+  deleteVolunteerSheetForUser,
+  deleteVolunteerForUser,
   getDefaultVolunteerSheet,
   importVolunteerRows,
   isValidTeacher,
   isValidVolunteerStatus,
   listVolunteerSheets,
-  listVolunteers,
+  listVolunteersForUser,
   listVolunteersBySheet,
   updateVolunteerSheet,
   updateVolunteer
@@ -54,14 +54,22 @@ function parseOptionalId(value: unknown) {
   return Number.isInteger(id) && id > 0 ? id : undefined;
 }
 
-async function resolveSheetId(value: unknown) {
+function getUserId(req: Request) {
+  if (!req.user) {
+    throw new Error('UNAUTHORIZED');
+  }
+
+  return req.user.id;
+}
+
+async function resolveSheetId(userId: number, value: unknown) {
   const sheetId = parseOptionalId(value);
 
   if (sheetId) {
     return sheetId;
   }
 
-  const defaultSheet = await getDefaultVolunteerSheet();
+  const defaultSheet = await getDefaultVolunteerSheet(userId);
   return defaultSheet.id;
 }
 
@@ -117,6 +125,7 @@ function parseExcelRows(buffer: Buffer) {
 }
 
 export async function getVolunteers(req: Request, res: Response) {
+  const userId = getUserId(req);
   const { status } = req.query;
   const sheetId = parseOptionalId(req.query.sheetId);
 
@@ -125,34 +134,37 @@ export async function getVolunteers(req: Request, res: Response) {
   }
 
   const volunteers = sheetId
-    ? await listVolunteersBySheet(sheetId, status)
-    : await listVolunteers(status);
+    ? await listVolunteersBySheet(userId, sheetId, status)
+    : await listVolunteersForUser(userId, status);
   return res.json(volunteers);
 }
 
-export async function getVolunteerSheets(_req: Request, res: Response) {
-  const sheets = await listVolunteerSheets();
+export async function getVolunteerSheets(req: Request, res: Response) {
+  const userId = getUserId(req);
+  const sheets = await listVolunteerSheets(userId);
 
   if (sheets.length > 0) {
     return res.json(sheets);
   }
 
-  const defaultSheet = await getDefaultVolunteerSheet();
+  const defaultSheet = await getDefaultVolunteerSheet(userId);
   return res.json([defaultSheet]);
 }
 
 export async function postVolunteerSheet(req: Request, res: Response) {
+  const userId = getUserId(req);
   const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
 
   if (!name) {
     return res.status(400).json({ message: '表格名称不能为空。' });
   }
 
-  const sheet = await createVolunteerSheet({ name });
+  const sheet = await createVolunteerSheet(userId, { name });
   return res.status(201).json(sheet);
 }
 
 export async function putVolunteerSheet(req: Request, res: Response) {
+  const userId = getUserId(req);
   const id = parseId(req.params.id);
   const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
 
@@ -164,7 +176,7 @@ export async function putVolunteerSheet(req: Request, res: Response) {
     return res.status(400).json({ message: '表格名称不能为空。' });
   }
 
-  const sheet = await updateVolunteerSheet(id, { name });
+  const sheet = await updateVolunteerSheet(userId, id, { name });
 
   if (!sheet) {
     return res.status(404).json({ message: '未找到该表格。' });
@@ -174,6 +186,7 @@ export async function putVolunteerSheet(req: Request, res: Response) {
 }
 
 export async function removeVolunteerSheet(req: Request, res: Response) {
+  const userId = getUserId(req);
   const id = parseId(req.params.id);
 
   if (!id) {
@@ -181,7 +194,7 @@ export async function removeVolunteerSheet(req: Request, res: Response) {
   }
 
   try {
-    await deleteVolunteerSheet(id);
+    await deleteVolunteerSheetForUser(userId, id);
     return res.status(204).send();
   } catch (error) {
     if (error instanceof Error && error.message === '至少需要保留一个表格。') {
@@ -193,10 +206,11 @@ export async function removeVolunteerSheet(req: Request, res: Response) {
 }
 
 export async function postVolunteer(req: Request, res: Response) {
+  const userId = getUserId(req);
   const { name, phone } = req.body;
   const age = parseAge(req.body.age);
   const status = req.body.status ?? 'NOT_CALLED';
-  const sheetId = await resolveSheetId(req.body.sheetId);
+  const sheetId = await resolveSheetId(userId, req.body.sheetId);
 
   if (!name || typeof name !== 'string') {
     return res.status(400).json({ message: '姓名不能为空。' });
@@ -218,7 +232,7 @@ export async function postVolunteer(req: Request, res: Response) {
     return res.status(400).json({ message: '负责老师无效。' });
   }
 
-  const volunteer = await createVolunteer({
+  const volunteer = await createVolunteer(userId, {
     sheetId,
     name: name.trim(),
     phone: phone.trim(),
@@ -234,6 +248,7 @@ export async function postVolunteer(req: Request, res: Response) {
 }
 
 export async function putVolunteer(req: Request, res: Response) {
+  const userId = getUserId(req);
   const id = parseId(req.params.id);
 
   if (!id) {
@@ -254,7 +269,7 @@ export async function putVolunteer(req: Request, res: Response) {
     return res.status(400).json({ message: '负责老师无效。' });
   }
 
-  const volunteer = await updateVolunteer(id, {
+  const volunteer = await updateVolunteer(userId, id, {
     ...('name' in req.body ? { name: String(req.body.name).trim() } : {}),
     ...('phone' in req.body ? { phone: String(req.body.phone).trim() } : {}),
     ...('account' in req.body ? { account: req.body.account ? String(req.body.account).trim() : null } : {}),
@@ -273,6 +288,7 @@ export async function putVolunteer(req: Request, res: Response) {
 }
 
 export async function removeVolunteer(req: Request, res: Response) {
+  const userId = getUserId(req);
   const id = parseId(req.params.id);
 
   if (!id) {
@@ -280,7 +296,7 @@ export async function removeVolunteer(req: Request, res: Response) {
   }
 
   try {
-    await deleteVolunteer(id);
+    await deleteVolunteerForUser(userId, id);
     return res.status(204).send();
   } catch {
     return res.status(404).json({ message: '未找到该志愿者。' });
@@ -288,6 +304,7 @@ export async function removeVolunteer(req: Request, res: Response) {
 }
 
 export async function importVolunteers(req: Request, res: Response) {
+  const userId = getUserId(req);
   if (!req.file || req.file.size === 0) {
     return res.status(400).json({ message: '文件为空。' });
   }
@@ -301,8 +318,8 @@ export async function importVolunteers(req: Request, res: Response) {
     });
   }
 
-  const sheetId = await resolveSheetId(req.body.sheetId);
-  const result = await importVolunteerRows(sheetId, rows);
+  const sheetId = await resolveSheetId(userId, req.body.sheetId);
+  const result = await importVolunteerRows(userId, sheetId, rows);
   return res.json({
     message: '表格导入完成。',
     ...result
@@ -310,6 +327,7 @@ export async function importVolunteers(req: Request, res: Response) {
 }
 
 export async function exportVolunteers(req: Request, res: Response) {
+  const userId = getUserId(req);
   const { status } = req.query;
   const sheetId = parseOptionalId(req.query.sheetId);
 
@@ -318,8 +336,8 @@ export async function exportVolunteers(req: Request, res: Response) {
   }
 
   const volunteers = sheetId
-    ? await listVolunteersBySheet(sheetId, status)
-    : await listVolunteers(status);
+    ? await listVolunteersBySheet(userId, sheetId, status)
+    : await listVolunteersForUser(userId, status);
   const rows = volunteers.map((volunteer) => ({
     姓名: volunteer.name,
     年龄: volunteer.age ?? '',
