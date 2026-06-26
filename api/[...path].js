@@ -8,7 +8,8 @@ const hopByHopHeaders = new Set([
   'te',
   'trailer',
   'transfer-encoding',
-  'upgrade'
+  'upgrade',
+  'content-encoding'
 ]);
 
 function normalizeBackendApiUrl() {
@@ -35,7 +36,11 @@ function readRequestBody(req) {
 function buildTargetUrl(req) {
   const backendApiUrl = normalizeBackendApiUrl();
   const pathValue = req.query.path;
-  const path = Array.isArray(pathValue) ? pathValue.join('/') : String(pathValue || '');
+  const queryPath = Array.isArray(pathValue) ? pathValue.join('/') : String(pathValue || '');
+  const requestPath = String(req.url || '')
+    .split('?')[0]
+    .replace(/^\/api\/?/, '');
+  const path = queryPath || requestPath;
   const searchParams = new URLSearchParams();
 
   for (const [key, value] of Object.entries(req.query)) {
