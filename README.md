@@ -181,24 +181,39 @@ npx prisma migrate deploy
 
 Vercel 适合部署本项目的前端静态页面。当前 Express 后端和 PostgreSQL 不在 Vercel 中运行，需要先把后端部署到可公网访问的服务器，例如 Docker 服务器、Render、Railway、Fly.io 或其他 Node.js 主机。
 
-前端部署步骤：
-
-1. 在 Vercel 新建项目并导入本仓库。
-2. 可以直接使用仓库根目录部署；项目已包含根目录 `vercel.json`。
-3. 也可以把 Vercel 的 Root Directory 设置为 `frontend`；`frontend/vercel.json` 也已配置好。
-4. 在 Vercel 项目的 Environment Variables 中添加：
+当前根目录部署方式已经包含 `/api` 代理函数。浏览器访问：
 
 ```text
-VITE_API_BASE_URL=https://你的后端域名/api
+https://你的前端域名/api/auth/register
+```
+
+时，Vercel 会把请求转发到 `BACKEND_API_URL` 指向的 Express 后端。
+
+根目录部署步骤：
+
+1. 在 Vercel 新建项目并导入本仓库。
+2. Root Directory 使用仓库根目录，不要设置为 `frontend`。
+3. 在 Vercel 项目的 Environment Variables 中添加：
+
+```text
+BACKEND_API_URL=https://你的后端域名/api
 ```
 
 如果后端部署在 `https://api.example.com`，则填写：
 
 ```text
-VITE_API_BASE_URL=https://api.example.com/api
+BACKEND_API_URL=https://api.example.com/api
 ```
 
-5. 点击 Deploy。
+4. 点击 Redeploy。
+
+如果你选择把 Vercel 的 Root Directory 设置为 `frontend`，则根目录的 `/api` 代理函数不会被部署。这种部署方式需要改用前端环境变量：
+
+```text
+VITE_API_BASE_URL=https://你的后端域名/api
+```
+
+然后重新部署前端。
 
 本地前端仍然可以使用：
 
