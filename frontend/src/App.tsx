@@ -1,4 +1,4 @@
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, Spin } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { useEffect, useState } from 'react';
 import { AppointmentPage } from './pages/AppointmentPage';
@@ -103,6 +103,18 @@ export default function App() {
     return <HomePage />;
   }
 
+  function renderContent() {
+    if (!authReady) {
+      return (
+        <div className="app-loading">
+          <Spin size="large" />
+        </div>
+      );
+    }
+
+    return user ? renderPage() : <AuthPage onAuthenticated={handleAuthenticated} />;
+  }
+
   return (
     <ConfigProvider
       locale={zhCN}
@@ -120,7 +132,7 @@ export default function App() {
         }
       }}
     >
-      {authReady && user ? renderPage() : <AuthPage onAuthenticated={handleAuthenticated} />}
+      {renderContent()}
     </ConfigProvider>
   );
 }

@@ -680,7 +680,7 @@ export function AppointmentPage() {
       {contextHolder}
       <Header className="app-header">
         <Space>
-          <Button icon={<ArrowLeftOutlined />} href="/" />
+          <Button icon={<ArrowLeftOutlined />} href="#/" />
           <Typography.Title level={3} className="app-title">
             预约管理
           </Typography.Title>

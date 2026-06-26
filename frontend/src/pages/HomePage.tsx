@@ -40,7 +40,7 @@ export function HomePage() {
             className="home-action-button"
             icon={<CalendarOutlined />}
             size="large"
-            href="/appointments"
+            href="#/appointments"
           >
             预约
           </Button>
