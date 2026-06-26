@@ -203,10 +203,12 @@ function filterTasksBySettings(tasks: CompletionTaskMap, allowed: AllowedComplet
 }
 
 function filterRecordsBySettings(records: TaskCompletionRecordInput[], allowed: AllowedCompletionMap) {
-  return records.map((record) => ({
-    ...record,
-    tasks: filterTasksBySettings(record.tasks, allowed)
-  }));
+  return records
+    .map((record) => ({
+      ...record,
+      tasks: filterTasksBySettings(record.tasks, allowed)
+    }))
+    .filter((record) => Object.keys(record.tasks).length > 0);
 }
 
 async function buildRoundExportDefinitions(userId: number) {
@@ -490,18 +492,24 @@ function parseSimpleModelSheet(sheet: XLSX.WorkSheet, forcedRoundName?: string |
     return [];
   }
 
-  const groupHeader = rows[headerRowIndex] ?? [];
-  const sessionHeader = rows[headerRowIndex + 1] ?? [];
+  const previousHeader = headerRowIndex > 0 ? rows[headerRowIndex - 1] ?? [] : [];
+  const currentHeader = rows[headerRowIndex] ?? [];
+  const hasTaskGroupHeader = previousHeader.slice(2).some((cell) => normalizeHeader(cell));
+  const groupHeader = hasTaskGroupHeader ? previousHeader : currentHeader;
+  const sessionHeader = hasTaskGroupHeader ? currentHeader : rows[headerRowIndex + 1] ?? [];
+  const dataStartRow = hasTaskGroupHeader ? headerRowIndex + 1 : headerRowIndex + 2;
+  const nameCol = findColumn(sessionHeader, (header) => header === '被试姓名');
+  const codeCol = findColumn(sessionHeader, (header) => header === '被试编号');
   const roundName = forcedRoundName ?? '第一轮';
   const paymentCol = findColumn(groupHeader, (header) => header.includes('被试费发放'));
   const cognitiveReportCol = findColumn(groupHeader, (header) => header === '认知报告发放');
   const remarkCol = findGlobalRemarkColumn(groupHeader, sessionHeader);
   const records: TaskCompletionRecordInput[] = [];
 
-  for (let rowIndex = headerRowIndex + 2; rowIndex < rows.length; rowIndex += 1) {
+  for (let rowIndex = dataStartRow; rowIndex < rows.length; rowIndex += 1) {
     const row = rows[rowIndex] ?? [];
-    const subjectName = normalizeHeader(row[0]);
-    const subjectCode = normalizeHeader(row[1]);
+    const subjectName = normalizeHeader(row[nameCol >= 0 ? nameCol : 0]);
+    const subjectCode = normalizeHeader(row[codeCol >= 0 ? codeCol : 1]);
 
     if (!subjectName || subjectName === '被试姓名') {
       continue;
@@ -634,10 +642,12 @@ export async function getTaskCompletionRecords(req: Request, res: Response) {
   const userId = getUserId(req);
   const records = await listTaskCompletionRecords(userId);
   const allowed = await buildAllowedCompletionMap(userId);
-  const filteredRecords = records.map((record) => ({
-    ...record,
-    tasks: filterTasksBySettings(record.tasks as CompletionTaskMap, allowed)
-  }));
+  const filteredRecords = records
+    .map((record) => ({
+      ...record,
+      tasks: filterTasksBySettings(record.tasks as CompletionTaskMap, allowed)
+    }))
+    .filter((record) => Object.keys(record.tasks).length > 0);
   return res.json(filteredRecords);
 }
 
@@ -765,10 +775,12 @@ export async function exportTaskCompletionRecords(req: Request, res: Response) {
   const userId = getUserId(req);
   const records = await listTaskCompletionRecords(userId);
   const allowed = await buildAllowedCompletionMap(userId);
-  const filteredRecords = records.map((record) => ({
-    ...record,
-    tasks: filterTasksBySettings(record.tasks as CompletionTaskMap, allowed)
-  }));
+  const filteredRecords = records
+    .map((record) => ({
+      ...record,
+      tasks: filterTasksBySettings(record.tasks as CompletionTaskMap, allowed)
+    }))
+    .filter((record) => Object.keys(record.tasks).length > 0);
   const roundDefinitions = await buildRoundExportDefinitions(userId);
   const workbook = XLSX.utils.book_new();
 
